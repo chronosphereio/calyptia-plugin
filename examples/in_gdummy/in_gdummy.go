@@ -5,6 +5,7 @@ package main
 */
 import "C"
 import (
+	"errors"
 	"fmt"
 	"time"
 	"reflect"
@@ -23,6 +24,8 @@ type c_slice_t struct {
 	n int
 }
 
+var AllocationFailed = errors.New("C.calloc has failed.")
+
 //export FLBPluginRegister
 func FLBPluginRegister(def unsafe.Pointer) int {
 	return input.FLBPluginRegister(def, "gdummy", "dummy GO!")
@@ -38,8 +41,12 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 	return input.FLB_OK
 }
 
-func alloc(size int) unsafe.Pointer {
-	return C.calloc(C.size_t(size), 1)
+func alloc(size int) (unsafe.Pointer, error) {
+	p := C.calloc(C.size_t(size), 1)
+	if p == nil {
+		return nil, AllocationFailed
+	}
+	return p, nil
 }
 
 func makeSlice(p unsafe.Pointer, n int) *Slice {
@@ -70,7 +77,10 @@ func FLBPluginInputCallback(data *unsafe.Pointer, size *C.size_t) int {
 	}
 
 	length := len(packed)
-	p := alloc(length)
+	p, err := alloc(length)
+	if err != nil {
+		return input.FLB_ERROR
+	}
 	s := makeSlice(p, length)
 	copy(s.Data, packed)
 	*data = unsafe.Pointer(&s.Data[0])
