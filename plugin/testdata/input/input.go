@@ -8,7 +8,7 @@ import (
 )
 
 func init() {
-	plugin.RegisterInput("go-dummy-input-plugin", "Dummy golang input plugin for testing", &dummyPlugin{})
+	plugin.RegisterInput("go-test-input-plugin", "Golang input plugin for testing", &dummyPlugin{})
 }
 
 type dummyPlugin struct {
@@ -20,12 +20,12 @@ func (plug *dummyPlugin) Init(ctx context.Context, conf plugin.ConfigLoader) err
 	return nil
 }
 
-func (plug *dummyPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) error {
+func (plug dummyPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) error {
 	for {
 		ch <- plugin.Message{
 			Time: time.Now(),
 			Record: map[string]string{
-				"message": "hello from go-dummy-plugin",
+				"message": "hello from go-test-input-plugin",
 				"foo":     plug.foo,
 			},
 		}

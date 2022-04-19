@@ -17,16 +17,16 @@ var (
 	theOutput OutputPlugin
 )
 
+var registerWG sync.WaitGroup
 var initWG sync.WaitGroup
-var setupWG sync.WaitGroup
 var once sync.Once
 var runCtx context.Context
 var runCancel context.CancelFunc
 var theChannel chan Message
 
 func init() {
+	registerWG.Add(1)
 	initWG.Add(1)
-	setupWG.Add(1)
 }
 
 type InputPlugin interface {

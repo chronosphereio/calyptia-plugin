@@ -19,9 +19,11 @@ import (
 	"github.com/ugorji/go/codec"
 )
 
+var unregister func()
+
 //export FLBPluginRegister
 func FLBPluginRegister(def unsafe.Pointer) int {
-	defer initWG.Done()
+	defer registerWG.Done()
 
 	if theInput == nil && theOutput == nil {
 		fmt.Fprintf(os.Stderr, "no input or output registered\n")
@@ -29,22 +31,32 @@ func FLBPluginRegister(def unsafe.Pointer) int {
 	}
 
 	if theInput != nil {
-		return input.FLBPluginRegister(def, theName, theDesc)
+
+		out := input.FLBPluginRegister(def, theName, theDesc)
+		unregister = func() {
+			input.FLBPluginUnregister(def)
+		}
+		return out
 	}
 
-	return output.FLBPluginRegister(def, theName, theDesc)
+	out := output.FLBPluginRegister(def, theName, theDesc)
+	unregister = func() {
+		output.FLBPluginUnregister(def)
+	}
+
+	return out
 }
 
 //export FLBPluginInit
 func FLBPluginInit(ptr unsafe.Pointer) int {
-	defer setupWG.Done()
+	defer initWG.Done()
+
+	registerWG.Wait()
 
 	if theInput == nil && theOutput == nil {
 		fmt.Fprintf(os.Stderr, "no input or output registered\n")
 		return input.FLB_RETRY
 	}
-
-	initWG.Wait()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -69,12 +81,12 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 
 //export FLBPluginInputCallback
 func FLBPluginInputCallback(data *unsafe.Pointer, size *C.size_t) int {
+	initWG.Wait()
+
 	if theInput == nil {
 		fmt.Fprintf(os.Stderr, "no input registered\n")
 		return input.FLB_RETRY
 	}
-
-	setupWG.Wait()
 
 	var err error
 	once.Do(func() {
@@ -104,8 +116,12 @@ func FLBPluginInputCallback(data *unsafe.Pointer, size *C.size_t) int {
 			return input.FLB_ERROR
 		}
 
-		*data = C.CBytes(b)
+		cdata := C.CBytes(b)
+
+		*data = cdata
 		*size = C.size_t(len(b))
+
+		// C.free(unsafe.Pointer(cdata))
 	case <-runCtx.Done():
 		err := runCtx.Err()
 		if err != nil && !errors.Is(err, context.Canceled) {
@@ -119,12 +135,12 @@ func FLBPluginInputCallback(data *unsafe.Pointer, size *C.size_t) int {
 
 //export FLBPluginFlush
 func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
+	initWG.Wait()
+
 	if theOutput == nil {
 		fmt.Fprintf(os.Stderr, "no output registered\n")
 		return output.FLB_RETRY
 	}
-
-	setupWG.Wait()
 
 	var err error
 	once.Do(func() {
@@ -135,6 +151,7 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 			defer close(theChannel)
 
 			tag := C.GoString(ctag)
+			// C.free(unsafe.Pointer(ctag))
 			err = theOutput.Collect(runCtx, tag, theChannel)
 		}()
 	})
@@ -200,6 +217,9 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 		}
 
 		theChannel <- Message{Time: t, Record: rec}
+
+		// C.free(data)
+		// C.free(unsafe.Pointer(&clength))
 	}
 
 	return output.FLB_OK
@@ -213,6 +233,10 @@ func FLBPluginExit() int {
 
 	if theChannel != nil {
 		defer close(theChannel)
+	}
+
+	if unregister != nil {
+		unregister()
 	}
 
 	return input.FLB_OK
