@@ -93,8 +93,6 @@ func FLBPluginInputCallback(data *unsafe.Pointer, size *C.size_t) int {
 		runCtx, runCancel = context.WithCancel(context.Background())
 		theChannel = make(chan Message, 1)
 		go func() {
-			defer runCancel()
-			defer close(theChannel)
 			err = theInput.Collect(runCtx, theChannel)
 		}()
 	})
@@ -147,9 +145,6 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 		runCtx, runCancel = context.WithCancel(context.Background())
 		theChannel = make(chan Message, 1)
 		go func() {
-			defer runCancel()
-			defer close(theChannel)
-
 			tag := C.GoString(ctag)
 			// C.free(unsafe.Pointer(ctag))
 			err = theOutput.Collect(runCtx, tag, theChannel)
@@ -231,12 +226,12 @@ func FLBPluginExit() int {
 		runCancel()
 	}
 
-	if theChannel != nil {
-		defer close(theChannel)
-	}
-
 	if unregister != nil {
 		unregister()
+	}
+
+	if theChannel != nil {
+		defer close(theChannel)
 	}
 
 	return input.FLB_OK

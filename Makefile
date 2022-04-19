@@ -6,7 +6,7 @@ local-input-plugin:
 local-output-plugin:
 	go build -trimpath -buildmode c-shared -o ./plugin/testdata/go-test-output-plugin.so ./plugin/testdata/output/output.go
 
-local-plugins: input-plugin output-plugin
+local-plugins: local-input-plugin local-output-plugin
 
 fluentbit-run:
 	docker run --rm -v $(shell pwd)/plugin/testdata:/fluent-bit/etc/:ro ghcr.io/calyptia/enterprise:main /fluent-bit/bin/fluent-bit -c fluent-bit/etc/fluent-bit.conf
