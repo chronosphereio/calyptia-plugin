@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"time"
@@ -22,7 +23,7 @@ import (
 func FLBPluginRegister(def unsafe.Pointer) int {
 	defer initWG.Done()
 
-	if theInput == nil || theOutput == nil {
+	if theInput == nil && theOutput == nil {
 		fmt.Fprintf(os.Stderr, "no input or output registered\n")
 		return input.FLB_RETRY
 	}
@@ -38,7 +39,7 @@ func FLBPluginRegister(def unsafe.Pointer) int {
 func FLBPluginInit(ptr unsafe.Pointer) int {
 	defer setupWG.Done()
 
-	if theInput == nil || theOutput == nil {
+	if theInput == nil && theOutput == nil {
 		fmt.Fprintf(os.Stderr, "no input or output registered\n")
 		return input.FLB_RETRY
 	}
@@ -52,9 +53,11 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 
 	var err error
 	if theInput != nil {
-		err = theInput.Setup(ctx, conf)
+		conf.kind = "input"
+		err = theInput.Init(ctx, conf)
 	} else {
-		err = theOutput.Setup(ctx, conf)
+		conf.kind = "output"
+		err = theOutput.Init(ctx, conf)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "init: %v\n", err)
@@ -80,7 +83,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, size *C.size_t) int {
 		go func() {
 			defer runCancel()
 			defer close(theChannel)
-			err = theInput.Run(runCtx, theChannel)
+			err = theInput.Collect(runCtx, theChannel)
 		}()
 	})
 	if err != nil {
@@ -118,7 +121,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, size *C.size_t) int {
 func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 	if theOutput == nil {
 		fmt.Fprintf(os.Stderr, "no output registered\n")
-		return input.FLB_RETRY
+		return output.FLB_RETRY
 	}
 
 	setupWG.Wait()
@@ -132,12 +135,12 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 			defer close(theChannel)
 
 			tag := C.GoString(ctag)
-			err = theOutput.Run(runCtx, tag, theChannel)
+			err = theOutput.Collect(runCtx, tag, theChannel)
 		}()
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "run: %s\n", err)
-		return input.FLB_ERROR
+		return output.FLB_ERROR
 	}
 
 	in := C.GoBytes(data, C.int(clength))
@@ -147,32 +150,59 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 
 	for {
 		var entry []any
-		if err := dec.Decode(&entry); err != nil {
+		err := dec.Decode(&entry)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "decode: %s\n", err)
-			return input.FLB_ERROR
+			return output.FLB_ERROR
 		}
 
 		if d := len(entry); d != 2 {
 			fmt.Fprintf(os.Stderr, "unexpected entry length: %d\n", d)
-			return input.FLB_ERROR
+			return output.FLB_ERROR
 		}
 
 		ft, ok := entry[0].(fTime)
 		if !ok {
 			fmt.Fprintf(os.Stderr, "unexpected entry time type: %T\n", entry[0])
-			return input.FLB_ERROR
+			return output.FLB_ERROR
 		}
 
 		t := time.Time(ft)
 
-		rec, ok := entry[1].(map[string]string)
+		recVal, ok := entry[1].(map[any]any)
 		if !ok {
 			fmt.Fprintf(os.Stderr, "unexpected entry record type: %T\n", entry[1])
-			return input.FLB_ERROR
+			return output.FLB_ERROR
+		}
+
+		var rec map[string]string
+		if d := len(recVal); d != 0 {
+			rec = make(map[string]string, d)
+			for k, v := range recVal {
+				key, ok := k.(string)
+				if !ok {
+					fmt.Fprintf(os.Stderr, "unexpected record key type: %T\n", k)
+					return output.FLB_ERROR
+				}
+
+				val, ok := v.([]uint8)
+				if !ok {
+					fmt.Fprintf(os.Stderr, "unexpected record value type: %T\n", v)
+					return output.FLB_ERROR
+				}
+
+				rec[string(key)] = string(val)
+			}
 		}
 
 		theChannel <- Message{Time: t, Record: rec}
 	}
+
+	return output.FLB_OK
 }
 
 //export FLBPluginExit
@@ -181,14 +211,24 @@ func FLBPluginExit() int {
 		runCancel()
 	}
 
-	defer close(theChannel)
+	if theChannel != nil {
+		defer close(theChannel)
+	}
+
 	return input.FLB_OK
 }
 
 type flbConfigLoader struct {
-	ptr unsafe.Pointer
+	ptr  unsafe.Pointer
+	kind string
 }
 
-func (f *flbConfigLoader) Load(key string) string {
-	return input.FLBPluginConfigKey(f.ptr, key)
+func (f *flbConfigLoader) String(key string) string {
+	switch f.kind {
+	case "input":
+		return input.FLBPluginConfigKey(f.ptr, key)
+	case "output":
+		return output.FLBPluginConfigKey(f.ptr, key)
+	}
+	return ""
 }

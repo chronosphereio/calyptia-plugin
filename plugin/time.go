@@ -15,12 +15,12 @@ var _ codec.BytesExt = (*fTime)(nil)
 type fTime time.Time
 
 func (*fTime) WriteExt(v interface{}) []byte {
-	ft, ok := v.(fTime)
+	ft, ok := v.(*fTime)
 	if !ok {
 		panic(fmt.Sprintf("unexpected fluent time type %T", v))
 	}
 
-	t := time.Time(ft).UTC()
+	t := time.Time(*ft).UTC()
 	sec := t.Unix()
 	nsec := t.UnixNano()
 
@@ -31,8 +31,8 @@ func (*fTime) WriteExt(v interface{}) []byte {
 	return b
 }
 
-func (ft *fTime) ReadExt(dst interface{}, src []byte) {
-	_, ok := dst.(fTime)
+func (*fTime) ReadExt(dst interface{}, src []byte) {
+	ft, ok := dst.(*fTime)
 	if !ok {
 		panic(fmt.Sprintf("unexpected fluent time type %T", dst))
 	}

@@ -30,17 +30,17 @@ func init() {
 }
 
 type InputPlugin interface {
-	Setup(ctx context.Context, conf ConfigLoader) error
-	Run(ctx context.Context, ch chan<- Message) error
+	Init(ctx context.Context, conf ConfigLoader) error
+	Collect(ctx context.Context, ch chan<- Message) error
 }
 
 type OutputPlugin interface {
-	Setup(ctx context.Context, conf ConfigLoader) error
-	Run(ctx context.Context, tag string, ch <-chan Message) error
+	Init(ctx context.Context, conf ConfigLoader) error
+	Collect(ctx context.Context, tag string, ch <-chan Message) error
 }
 
 type ConfigLoader interface {
-	Load(key string) string
+	String(key string) string
 }
 
 type Message struct {

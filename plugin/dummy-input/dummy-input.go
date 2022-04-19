@@ -15,13 +15,13 @@ type dummyPlugin struct {
 	foo string
 }
 
-func (plug *dummyPlugin) Setup(ctx context.Context, conf plugin.ConfigLoader) error {
-	plug.foo = conf.Load("foo")
+func (plug *dummyPlugin) Init(ctx context.Context, conf plugin.ConfigLoader) error {
+	plug.foo = conf.String("foo")
 	return nil
 }
 
-func (plug *dummyPlugin) Run(ctx context.Context, ch chan<- plugin.Message) error {
-	for i := 0; i < 10; i++ {
+func (plug *dummyPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) error {
+	for {
 		ch <- plugin.Message{
 			Time: time.Now(),
 			Record: map[string]string{
@@ -32,8 +32,6 @@ func (plug *dummyPlugin) Run(ctx context.Context, ch chan<- plugin.Message) erro
 
 		time.Sleep(time.Second)
 	}
-
-	return nil
 }
 
 func main() {}
