@@ -37,6 +37,10 @@ func (*fTime) ReadExt(dst interface{}, src []byte) {
 		panic(fmt.Sprintf("unexpected fluent time type %T", dst))
 	}
 
+	if len(src) != 8 {
+		panic(fmt.Sprintf("unexpected fluent time length %d", len(src)))
+	}
+
 	sec := binary.BigEndian.Uint32(src)
 	nsec := binary.BigEndian.Uint32(src[4:])
 
