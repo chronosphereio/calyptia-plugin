@@ -36,7 +36,7 @@ type InputPlugin interface {
 
 type OutputPlugin interface {
 	Init(ctx context.Context, conf ConfigLoader) error
-	Collect(ctx context.Context, tag string, ch <-chan Message) error
+	Collect(ctx context.Context, ch <-chan Message) error
 }
 
 type ConfigLoader interface {
@@ -46,6 +46,16 @@ type ConfigLoader interface {
 type Message struct {
 	Time   time.Time
 	Record map[string]string
+	tag    *string
+}
+
+// Tag should only be available to incomming messages.
+// Aka. use it at output plugins.
+func (m Message) Tag() string {
+	if m.tag == nil {
+		return ""
+	}
+	return *m.tag
 }
 
 type Writer interface {

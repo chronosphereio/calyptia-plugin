@@ -31,7 +31,6 @@ func FLBPluginRegister(def unsafe.Pointer) int {
 	}
 
 	if theInput != nil {
-
 		out := input.FLBPluginRegister(def, theName, theDesc)
 		unregister = func() {
 			input.FLBPluginUnregister(def)
@@ -61,14 +60,12 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	conf := &flbConfigLoader{ptr: ptr}
-
 	var err error
 	if theInput != nil {
-		conf.kind = "input"
+		conf := &flbInputConfigLoader{ptr: ptr}
 		err = theInput.Init(ctx, conf)
 	} else {
-		conf.kind = "output"
+		conf := &flbOutputConfigLoader{ptr: ptr}
 		err = theOutput.Init(ctx, conf)
 	}
 	if err != nil {
@@ -80,7 +77,7 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 }
 
 //export FLBPluginInputCallback
-func FLBPluginInputCallback(data *unsafe.Pointer, size *C.size_t) int {
+func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 	initWG.Wait()
 
 	if theInput == nil {
@@ -117,7 +114,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, size *C.size_t) int {
 		cdata := C.CBytes(b)
 
 		*data = cdata
-		*size = C.size_t(len(b))
+		*csize = C.size_t(len(b))
 
 		// C.free(unsafe.Pointer(cdata))
 	case <-runCtx.Done():
@@ -145,9 +142,7 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 		runCtx, runCancel = context.WithCancel(context.Background())
 		theChannel = make(chan Message, 1)
 		go func() {
-			tag := C.GoString(ctag)
-			// C.free(unsafe.Pointer(ctag))
-			err = theOutput.Collect(runCtx, tag, theChannel)
+			err = theOutput.Collect(runCtx, theChannel)
 		}()
 	})
 	if err != nil {
@@ -211,7 +206,10 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 			}
 		}
 
-		theChannel <- Message{Time: t, Record: rec}
+		tag := C.GoString(ctag)
+		// C.free(unsafe.Pointer(ctag))
+
+		theChannel <- Message{Time: t, Record: rec, tag: &tag}
 
 		// C.free(data)
 		// C.free(unsafe.Pointer(&clength))
@@ -237,17 +235,18 @@ func FLBPluginExit() int {
 	return input.FLB_OK
 }
 
-type flbConfigLoader struct {
-	ptr  unsafe.Pointer
-	kind string
+type flbInputConfigLoader struct {
+	ptr unsafe.Pointer
 }
 
-func (f *flbConfigLoader) String(key string) string {
-	switch f.kind {
-	case "input":
-		return input.FLBPluginConfigKey(f.ptr, key)
-	case "output":
-		return output.FLBPluginConfigKey(f.ptr, key)
-	}
-	return ""
+func (f *flbInputConfigLoader) String(key string) string {
+	return input.FLBPluginConfigKey(f.ptr, key)
+}
+
+type flbOutputConfigLoader struct {
+	ptr unsafe.Pointer
+}
+
+func (f *flbOutputConfigLoader) String(key string) string {
+	return output.FLBPluginConfigKey(f.ptr, key)
 }
