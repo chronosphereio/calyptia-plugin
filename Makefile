@@ -9,7 +9,7 @@ local-output-plugin:
 local-plugins: local-input-plugin local-output-plugin
 
 fluentbit-run:
-	docker run --rm -v $(shell pwd)/plugin/testdata:/fluent-bit/etc/:ro ghcr.io/calyptia/enterprise:main /fluent-bit/bin/fluent-bit -c fluent-bit/etc/fluent-bit.conf
+	docker run --rm -v $(shell pwd)/plugin/testdata:/fluent-bit/etc/:ro ghcr.io/calyptia/enterprise/advanced:main /fluent-bit/bin/fluent-bit -c fluent-bit/etc/fluent-bit.conf
 
 # -------------------------------------------------------------------------------------------
 # Using docker, run these if you are not in linux/amd64 or if you don't have C++ build tools.
