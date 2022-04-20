@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"reflect"
 	"time"
@@ -150,12 +151,36 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 		return output.FLB_ERROR
 	}
 
+	select {
+	case <-runCtx.Done():
+		err := runCtx.Err()
+		if err != nil && !errors.Is(err, context.Canceled) {
+			fmt.Fprintf(os.Stderr, "run: %s\n", err)
+			return output.FLB_ERROR
+		}
+
+		return output.FLB_OK
+	default:
+	}
+
 	in := C.GoBytes(data, C.int(clength))
 	h := &codec.MsgpackHandle{}
 	h.SetBytesExt(reflect.TypeOf(fTime{}), 0, &fTime{})
 	dec := codec.NewDecoderBytes(in, h)
 
 	for {
+		select {
+		case <-runCtx.Done():
+			err := runCtx.Err()
+			if err != nil && !errors.Is(err, context.Canceled) {
+				fmt.Fprintf(os.Stderr, "run: %s\n", err)
+				return output.FLB_ERROR
+			}
+
+			return output.FLB_OK
+		default:
+		}
+
 		var entry []any
 		err := dec.Decode(&entry)
 		if errors.Is(err, io.EOF) {
@@ -220,17 +245,19 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 
 //export FLBPluginExit
 func FLBPluginExit() int {
+	log.Printf("calling FLBPluginExit(): name=%q\n", theName)
+
 	if runCancel != nil {
 		runCancel()
 	}
 
-	if unregister != nil {
-		unregister()
-	}
+	// if unregister != nil {
+	// 	unregister()
+	// }
 
-	if theChannel != nil {
-		defer close(theChannel)
-	}
+	// if theChannel != nil {
+	// 	defer close(theChannel)
+	// }
 
 	return input.FLB_OK
 }

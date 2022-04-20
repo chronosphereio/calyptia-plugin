@@ -21,7 +21,8 @@ func (plug dummyPlugin) Collect(ctx context.Context, ch <-chan plugin.Message) e
 	for {
 		select {
 		case <-ctx.Done():
-			if err := ctx.Err(); err != nil && !errors.Is(err, context.Canceled) {
+			err := ctx.Err()
+			if err != nil && !errors.Is(err, context.Canceled) {
 				return err
 			}
 
