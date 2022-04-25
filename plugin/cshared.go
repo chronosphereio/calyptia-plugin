@@ -143,7 +143,7 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 		runCtx, runCancel = context.WithCancel(context.Background())
 		theChannel = make(chan Message, 1)
 		go func() {
-			err = theOutput.Collect(runCtx, theChannel)
+			err = theOutput.Flush(runCtx, theChannel)
 		}()
 	})
 	if err != nil {

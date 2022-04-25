@@ -36,7 +36,7 @@ type InputPlugin interface {
 
 type OutputPlugin interface {
 	Init(ctx context.Context, conf ConfigLoader) error
-	Collect(ctx context.Context, ch <-chan Message) error
+	Flush(ctx context.Context, ch <-chan Message) error
 }
 
 type ConfigLoader interface {
@@ -49,8 +49,7 @@ type Message struct {
 	tag    *string
 }
 
-// Tag should only be available to incomming messages.
-// Aka. use it at output plugins.
+// Tag is available at output.
 func (m Message) Tag() string {
 	if m.tag == nil {
 		return ""
@@ -76,7 +75,7 @@ func mustOnce() {
 	atomic.StoreUint32(&atomicUint32, 1)
 }
 
-// RegisterInput registers a input plugin.
+// RegisterInput plugin.
 // This function must be called only once per file.
 func RegisterInput(name, desc string, in InputPlugin) {
 	mustOnce()
@@ -85,7 +84,7 @@ func RegisterInput(name, desc string, in InputPlugin) {
 	theInput = in
 }
 
-// RegisterOutput registers a output plugin.
+// RegisterOutput plugin.
 // This function must be called only once per file.
 func RegisterOutput(name, desc string, out OutputPlugin) {
 	mustOnce()
