@@ -57,14 +57,6 @@ func (m Message) Tag() string {
 	return *m.tag
 }
 
-type Writer interface {
-	Write(ctx context.Context, t time.Time, rec map[string]string) error
-}
-
-type Reader interface {
-	Read(ctx context.Context) (t time.Time, rec map[string]string, err error)
-}
-
 // mustOnce allows to be called only once otherwise it panics.
 // This is used to register a single plugin per file.
 func mustOnce() {
