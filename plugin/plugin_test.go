@@ -14,11 +14,6 @@ import (
 )
 
 func TestPlugin(t *testing.T) {
-	if old, ok := os.LookupEnv("DOCKER_DEFAULT_PLATFORM"); ok {
-		os.Setenv("DOCKER_DEFAULT_PLATFORM", "linux/amd64")
-		defer os.Setenv("DOCKER_DEFAULT_PLATFORM", old)
-	}
-
 	pool, err := dockertest.NewPool("")
 	wantNoErr(t, err)
 	testPlugin(t, pool)
