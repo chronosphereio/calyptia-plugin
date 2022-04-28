@@ -165,7 +165,12 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 
 	in := C.GoBytes(data, C.int(clength))
 	h := &codec.MsgpackHandle{}
-	h.SetBytesExt(reflect.TypeOf(fTime{}), 0, &fTime{})
+	err = h.SetBytesExt(reflect.TypeOf(fTime{}), 0, &fTime{})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fluent-bit time bytes ext: %v\n", err)
+		return output.FLB_ERROR
+	}
+
 	dec := codec.NewDecoderBytes(in, h)
 
 	for {
