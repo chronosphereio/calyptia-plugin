@@ -8,6 +8,8 @@ import (
 	"github.com/ugorji/go/codec"
 )
 
+const fFimeSize = 8
+
 var _ codec.BytesExt = (*fTime)(nil)
 
 // fTime implements codec.BytesExt to handle custom (de)serialization of types to/from []byte.
@@ -24,7 +26,7 @@ func (*fTime) WriteExt(v interface{}) []byte {
 	sec := t.Unix()
 	nsec := t.UnixNano()
 
-	b := make([]byte, 8)
+	b := make([]byte, fFimeSize)
 	binary.BigEndian.PutUint32(b, uint32(sec))
 	binary.BigEndian.PutUint32(b[4:], uint32(nsec))
 
@@ -37,7 +39,7 @@ func (*fTime) ReadExt(dst interface{}, src []byte) {
 		panic(fmt.Sprintf("unexpected fluent time type %T", dst))
 	}
 
-	if len(src) != 8 {
+	if len(src) != fFimeSize {
 		panic(fmt.Sprintf("unexpected fluent time length %d", len(src)))
 	}
 
