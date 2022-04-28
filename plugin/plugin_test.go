@@ -39,8 +39,8 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 
 	err = pool.Client.BuildImage(dc.BuildImageOptions{
 		Name:         "fluent-bit-go.localhost",
-		ContextDir:   "../",
-		Dockerfile:   "test.Dockerfile",
+		ContextDir:   filepath.Join(pwd, ".."),
+		Dockerfile:   "plugin/testdata/Dockerfile",
 		Platform:     "linux/amd64",
 		OutputStream: io.Discard,
 		Pull:         true,
