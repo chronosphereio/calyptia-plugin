@@ -97,16 +97,18 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	}
 
 	// Input plugin sends:
-	// Message{
-	// 	Time: time.Now(),
-	// 	Record: map[string]string{
-	// 		"message": "hello from go-test-input-plugin",
-	// 		"foo":     foo,
-	// 	},
-	// }
+	//
+	//	Message{
+	//		Time: time.Now(),
+	//		Record: map[string]string{
+	//			"message": "hello from go-test-input-plugin",
+	//			"foo":     foo,
+	//		},
+	//	}
 	//
 	// Output plugin writes to file:
-	// fmt.Fprintf(f, "message=\"got record\" tag=%s time=%s record=%+v\n", msg.Tag(), msg.Time.Format(time.RFC3339), msg.Record)
+	//
+	//	fmt.Fprintf(f, "message=\"got record\" tag=%s time=%s record=%+v\n", msg.Tag(), msg.Time.Format(time.RFC3339), msg.Record)
 	re := regexp.MustCompile(`^message="got record" tag=test-input time=[^\s]+ record=map\[foo:bar message:hello from go-test-input-plugin]$`)
 
 	// fluentbit runs for 5 seconds, so at most we could get 5 records if they are collected every one second.
