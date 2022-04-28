@@ -10,16 +10,16 @@ import (
 
 const fFimeSize = 8
 
-var _ codec.BytesExt = (*fTime)(nil)
+var _ codec.BytesExt = (*bigEndianTime)(nil)
 
-// fTime implements codec.BytesExt to handle custom (de)serialization of types to/from []byte.
+// bigEndianTime implements codec.BytesExt to handle custom (de)serialization of types to/from []byte.
 // It is used by codecs (e.g. binc, msgpack, simple) which do custom serialization of the types.
-type fTime time.Time
+type bigEndianTime time.Time
 
-func (*fTime) WriteExt(v interface{}) []byte {
-	ft, ok := v.(*fTime)
+func (*bigEndianTime) WriteExt(v interface{}) []byte {
+	ft, ok := v.(*bigEndianTime)
 	if !ok {
-		panic(fmt.Sprintf("unexpected fluent time type %T", v))
+		panic(fmt.Sprintf("unexpected big endian time type %T", v))
 	}
 
 	t := time.Time(*ft).UTC()
@@ -33,19 +33,19 @@ func (*fTime) WriteExt(v interface{}) []byte {
 	return b
 }
 
-func (*fTime) ReadExt(dst interface{}, src []byte) {
-	ft, ok := dst.(*fTime)
+func (*bigEndianTime) ReadExt(dst interface{}, src []byte) {
+	ft, ok := dst.(*bigEndianTime)
 	if !ok {
-		panic(fmt.Sprintf("unexpected fluent time type %T", dst))
+		panic(fmt.Sprintf("unexpected big endian time type %T", dst))
 	}
 
 	if len(src) != fFimeSize {
-		panic(fmt.Sprintf("unexpected fluent time length %d", len(src)))
+		panic(fmt.Sprintf("unexpected big endian time length %d", len(src)))
 	}
 
 	sec := binary.BigEndian.Uint32(src)
 	nsec := binary.BigEndian.Uint32(src[4:])
 
 	t := time.Unix(int64(sec), int64(nsec)).UTC()
-	*ft = fTime(t)
+	*ft = bigEndianTime(t)
 }

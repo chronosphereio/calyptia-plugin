@@ -165,9 +165,9 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 
 	in := C.GoBytes(data, C.int(clength))
 	h := &codec.MsgpackHandle{}
-	err = h.SetBytesExt(reflect.TypeOf(fTime{}), 0, &fTime{})
+	err = h.SetBytesExt(reflect.TypeOf(bigEndianTime{}), 0, &bigEndianTime{})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fluent-bit time bytes ext: %v\n", err)
+		fmt.Fprintf(os.Stderr, "big endian time bytes ext: %v\n", err)
 		return output.FLB_ERROR
 	}
 
@@ -202,7 +202,7 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 			return output.FLB_ERROR
 		}
 
-		ft, ok := entry[0].(fTime)
+		ft, ok := entry[0].(bigEndianTime)
 		if !ok {
 			fmt.Fprintf(os.Stderr, "unexpected entry time type: %T\n", entry[0])
 			return output.FLB_ERROR
