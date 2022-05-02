@@ -58,6 +58,7 @@ func NewEncoder() *FLBEncoder {
 	enc := new(FLBEncoder)
 	enc.handle = new(codec.MsgpackHandle)
 	enc.handle.WriteExt = true
+	// TODO: handle error.
 	_ = enc.handle.SetBytesExt(reflect.TypeOf(FLBTime{}), 0, &FLBTime{})
 
 	return enc

@@ -60,6 +60,7 @@ func NewDecoder(data unsafe.Pointer, length int) *FLBDecoder {
 
 	dec := new(FLBDecoder)
 	dec.handle = new(codec.MsgpackHandle)
+	// TODO: handle error.
 	_ = dec.handle.SetBytesExt(reflect.TypeOf(FLBTime{}), 0, &FLBTime{})
 
 	b = C.GoBytes(data, C.int(length))
