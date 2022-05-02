@@ -13,7 +13,7 @@ COPY . .
 RUN go build -trimpath -buildmode c-shared -o ./bin/go-test-input-plugin.so ./plugin/testdata/input/input.go
 RUN go build -trimpath -buildmode c-shared -o ./bin/go-test-output-plugin.so ./plugin/testdata/output/output.go
 
-FROM ghcr.io/calyptia/enterprise/advanced:main
+FROM ghcr.io/calyptia/calyptia-fluent-bit/advanced:main
 
 COPY --from=builder /fluent-bit-go/bin/go-test-input-plugin.so /fluent-bit/etc/
 COPY --from=builder /fluent-bit-go/bin/go-test-output-plugin.so /fluent-bit/etc/
