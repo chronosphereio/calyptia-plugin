@@ -23,6 +23,8 @@
 struct flb_api {
     char *(*output_get_property) (char *, void *);
     char *_;
+    void *(*output_get_cmt_instance) (void *);
+    void *__;
 };
 
 struct flb_plugin_proxy_context {
@@ -43,6 +45,12 @@ char *output_get_property(char *key, void *plugin)
 {
     struct flbgo_output_plugin *p = plugin;
     return p->api->output_get_property(key, p->o_ins);
+}
+
+void *output_get_cmt_instance(void *plugin)
+{
+    struct flbgo_output_plugin *p = plugin;
+    return p->api->output_get_cmt_instance(p->o_ins);
 }
 
 #endif

@@ -3,6 +3,7 @@ module github.com/calyptia/plugin
 go 1.18
 
 require (
+	github.com/calyptia/cmetrics-go v0.1.6-0.20220525100532-d30aeea26c0f
 	github.com/ory/dockertest/v3 v3.8.1
 	github.com/ugorji/go/codec v1.2.7
 )
