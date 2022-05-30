@@ -1,3 +1,5 @@
+// Package plugin implements the global context and objects required to run an instance of a plugin
+// also, the interfaces for input and output plugins.
 package plugin
 
 import (
@@ -17,32 +19,39 @@ var (
 	theOutput OutputPlugin
 )
 
-var registerWG sync.WaitGroup
-var initWG sync.WaitGroup
-var once sync.Once
-var runCtx context.Context
-var runCancel context.CancelFunc
-var theChannel chan Message
+var (
+	registerWG sync.WaitGroup
+	initWG     sync.WaitGroup
+	once       sync.Once
+	runCtx     context.Context
+	runCancel  context.CancelFunc
+	theChannel chan Message
+)
 
 func init() {
 	registerWG.Add(1)
 	initWG.Add(1)
 }
 
+// InputPlugin interface to represent an input fluent-bit plugin.
 type InputPlugin interface {
 	Init(ctx context.Context, conf ConfigLoader) error
 	Collect(ctx context.Context, ch chan<- Message) error
 }
 
+// OutputPlugin interface to represent an output fluent-bit plugin.
 type OutputPlugin interface {
 	Init(ctx context.Context, conf ConfigLoader) error
 	Flush(ctx context.Context, ch <-chan Message) error
 }
 
+// ConfigLoader interface to represent a fluent-bit configuration loader.
 type ConfigLoader interface {
 	String(key string) string
 }
 
+// Message struct to store a fluent-bit message this is collected (input) or flushed (output)
+// from a plugin implementation.
 type Message struct {
 	Time   time.Time
 	Record any

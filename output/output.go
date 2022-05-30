@@ -23,6 +23,7 @@ package output
 #include "flb_output.h"
 */
 import "C"
+
 import (
 	"sync"
 	"unsafe"

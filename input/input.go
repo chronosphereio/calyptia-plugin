@@ -23,6 +23,7 @@ package input
 #include "flb_input.h"
 */
 import "C"
+
 import (
 	"unsafe"
 )

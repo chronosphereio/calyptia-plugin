@@ -4,6 +4,7 @@ package plugin
 #include <stdlib.h>
 */
 import "C"
+
 import (
 	"context"
 	"errors"
@@ -23,6 +24,8 @@ import (
 
 var unregister func()
 
+// FLBPluginRegister registers a plugin in the context of the fluent-bit runtime, a name and description
+// can be provided.
 //export FLBPluginRegister
 func FLBPluginRegister(def unsafe.Pointer) int {
 	defer registerWG.Done()
@@ -48,6 +51,9 @@ func FLBPluginRegister(def unsafe.Pointer) int {
 	return out
 }
 
+// FLBPluginInit this method gets invoked once by the fluent-bit runtime at initialisation phase.
+// here all the plugin context should be initialised and any data or flag required for
+// plugins to execute the collect or flush callback.
 //export FLBPluginInit
 func FLBPluginInit(ptr unsafe.Pointer) int {
 	defer initWG.Done()
@@ -78,6 +84,10 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 	return input.FLB_OK
 }
 
+// FLBPluginInputCallback this method gets invoked by the fluent-bit runtime, once the plugin has been
+// initialised, the plugin implementation is responsible for handling the incoming data and the context
+// that gets past, for long-living collectors the plugin itself should keep a running thread and fluent-bit
+// will not execute further callbacks.
 //export FLBPluginInputCallback
 func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 	initWG.Wait()
@@ -134,7 +144,10 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 	return input.FLB_OK
 }
 
+// FLBPluginFlush callback gets invoked by the fluent-bit runtime once there is data for the corresponding
+// plugin in the pipeline, a data pointer, length and a tag are passed to the plugin interface implementation.
 //export FLBPluginFlush
+//nolint:funlen,gocognit,gocyclo //ignore length requirement for this function, TODO: refactor into smaller functions.
 func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 	initWG.Wait()
 
@@ -158,7 +171,7 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 
 	select {
 	case <-runCtx.Done():
-		err := runCtx.Err()
+		err = runCtx.Err()
 		if err != nil && !errors.Is(err, context.Canceled) {
 			fmt.Fprintf(os.Stderr, "run: %s\n", err)
 			return output.FLB_ERROR
@@ -168,7 +181,7 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 	default:
 	}
 
-	in := C.GoBytes(data, C.int(clength))
+	in := C.GoBytes(data, clength)
 	h := &codec.MsgpackHandle{}
 	err = h.SetBytesExt(reflect.TypeOf(bigEndianTime{}), 0, &bigEndianTime{})
 	if err != nil {
@@ -237,7 +250,7 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 					return output.FLB_ERROR
 				}
 
-				rec[string(key)] = string(val)
+				rec[key] = string(val)
 			}
 		}
 
@@ -253,6 +266,7 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 	return output.FLB_OK
 }
 
+// FLBPluginExit method is invoked once the plugin instance is exited from the fluent-bit context.
 //export FLBPluginExit
 func FLBPluginExit() int {
 	log.Printf("calling FLBPluginExit(): name=%q\n", theName)

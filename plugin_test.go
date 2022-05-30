@@ -27,6 +27,7 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	pwd, err := os.Getwd()
 	wantNoErr(t, err)
 
+	//nolint:gosec //required filesystem access to read fixture data.
 	f, err := os.Create(filepath.Join(pwd, "testdata/output.txt"))
 	wantNoErr(t, err)
 
