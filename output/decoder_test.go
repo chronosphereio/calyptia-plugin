@@ -24,7 +24,8 @@ import (
 )
 
 // dummyRecord should be byte Array, not Slice to be able to Cast c array.
-var dummyRecord [29]byte = [29]byte{0x92, /* fix array 2 */
+var dummyRecord [29]byte = [29]byte{
+	0x92,                                                       /* fix array 2 */
 	0xd7, 0x00, 0x5e, 0xa9, 0x17, 0xe0, 0x00, 0x00, 0x00, 0x00, /* 2020/04/29 06:00:00*/
 	0x82,                                           /* fix map 2*/
 	0xa7, 0x63, 0x6f, 0x6e, 0x70, 0x61, 0x63, 0x74, /* fix str 7 "compact" */
