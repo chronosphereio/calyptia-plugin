@@ -27,7 +27,7 @@ import "C"
 import (
 	"unsafe"
 
-	"github.com/calyptia/cmetrics-go"
+	cmetrics "github.com/calyptia/cmetrics-go"
 )
 
 // Define constants matching Fluent Bit core
