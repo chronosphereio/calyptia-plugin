@@ -20,9 +20,12 @@ import (
 	"github.com/calyptia/plugin/input"
 	"github.com/calyptia/plugin/output"
 	"github.com/ugorji/go/codec"
+
+	cmetrics "github.com/calyptia/cmetrics-go"
 )
 
 var unregister func()
+var cmt *cmetrics.Context
 
 // FLBPluginRegister registers a plugin in the context of the fluent-bit runtime, a name and description
 // can be provided.
@@ -71,10 +74,18 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 	var err error
 	if theInput != nil {
 		conf := &flbInputConfigLoader{ptr: ptr}
-		err = theInput.Init(ctx, conf)
+		cmt, err = input.FLBPluginGetCMetricsContext(ptr)
+		if err != nil {
+			return input.FLB_ERROR
+		}
+		err = theInput.Init(ctx, conf, cmt)
 	} else {
 		conf := &flbOutputConfigLoader{ptr: ptr}
-		err = theOutput.Init(ctx, conf)
+		cmt, err = output.FLBPluginGetCMetricsContext(ptr)
+		if err != nil {
+			return output.FLB_ERROR
+		}
+		err = theOutput.Init(ctx, conf, cmt)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "init: %v\n", err)
