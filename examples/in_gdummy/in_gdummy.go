@@ -44,11 +44,7 @@ func (plug gdummyPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) 
 		case <-ctx.Done():
 			err := ctx.Err()
 			if err != nil && !errors.Is(err, context.Canceled) {
-				err = counter_failure.Inc(time.Now(), []string{"in_gdummy"})
-				if err != nil {
-					return err
-				}
-				return err
+				return counter_failure.Inc(time.Now(), []string{"in_gdummy"})
 			}
 
 			return nil
