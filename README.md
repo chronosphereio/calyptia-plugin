@@ -46,6 +46,7 @@ import (
  "time"
 
  "github.com/calyptia/plugin"
+ cmetrics "github.com/calyptia/cmetrics-go"
 )
 
 // Plugin needs to be registered as an input type plugin in the initialisation phase
@@ -59,7 +60,7 @@ type dummyPlugin struct {
 
 // Init An instance of the configuration loader will be passed to the Init method so all the required
 // configuration entries can be retrieved within the plugin context.
-func (plug *dummyPlugin) Init(ctx context.Context, conf plugin.ConfigLoader) error {
+func (plug *dummyPlugin) Init(ctx context.Context, conf plugin.ConfigLoader, cmt *cmetrics.Context) error {
  plug.foo = conf.String("foo")
  return nil
 }
