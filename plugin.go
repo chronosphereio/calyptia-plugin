@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	cmetrics "github.com/calyptia/cmetrics-go"
+	"github.com/calyptia/plugin/metric"
 )
 
 // atomicUint32 is used to atomically check if the plugin has been registered.
@@ -37,19 +37,25 @@ func init() {
 
 // InputPlugin interface to represent an input fluent-bit plugin.
 type InputPlugin interface {
-	Init(ctx context.Context, conf ConfigLoader, cmt *cmetrics.Context) error
+	Init(ctx context.Context, conf ConfigLoader, metrics Metrics) error
 	Collect(ctx context.Context, ch chan<- Message) error
 }
 
 // OutputPlugin interface to represent an output fluent-bit plugin.
 type OutputPlugin interface {
-	Init(ctx context.Context, conf ConfigLoader, cmt *cmetrics.Context) error
+	Init(ctx context.Context, conf ConfigLoader, metrics Metrics) error
 	Flush(ctx context.Context, ch <-chan Message) error
 }
 
 // ConfigLoader interface to represent a fluent-bit configuration loader.
 type ConfigLoader interface {
 	String(key string) string
+}
+
+// Metrics builder.
+type Metrics interface {
+	NewCounter(name, desc string, labelValues ...string) metric.Counter
+	NewGauge(name, desc string, labelValues ...string) metric.Gauge
 }
 
 // Message struct to store a fluent-bit message this is collected (input) or flushed (output)

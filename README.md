@@ -60,7 +60,7 @@ type dummyPlugin struct {
 
 // Init An instance of the configuration loader will be passed to the Init method so all the required
 // configuration entries can be retrieved within the plugin context.
-func (plug *dummyPlugin) Init(ctx context.Context, conf plugin.ConfigLoader, cmt *cmetrics.Context) error {
+func (plug *dummyPlugin) Init(ctx context.Context, conf plugin.ConfigLoader, metrics plugin.Metrics) error {
  plug.foo = conf.String("foo")
  return nil
 }
@@ -104,6 +104,18 @@ A plugin can be built locally using go build as:
 
 ```bash
 go build -trimpath -buildmode c-shared -o ./bin/go-test-input-plugin.so .
+```
+
+Or compiled to linux/amd64 from another machine using [zig](https://ziglang.org/learn/overview/#zig-is-also-a-c-compiler)
+*(Example working on darwin/arm64)*.
+
+```bash
+CGO_ENABLED=1 \
+GOOS=linux \
+GOARCH=amd64 \
+CC="zig cc -target x86_64-linux-gnu -isystem /usr/include -L/usr/lib/x86_64-linux-gnu" \
+CXX="zig c++ -target x86_64-linux-gnu -isystem /usr/include -L/usr/lib/x86_64-linux-gnu" \
+go build -buildmode=c-shared -trimpath -o ./my-plugin-linux-amd64.so ./...
 ```
 
 Or using a Dockerfile as follows:
