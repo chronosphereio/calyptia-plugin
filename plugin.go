@@ -7,8 +7,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	cmetrics "github.com/calyptia/cmetrics-go"
 )
 
 // atomicUint32 is used to atomically check if the plugin has been registered.
@@ -37,13 +35,13 @@ func init() {
 
 // InputPlugin interface to represent an input fluent-bit plugin.
 type InputPlugin interface {
-	Init(ctx context.Context, conf ConfigLoader, cmt *cmetrics.Context) error
+	Init(ctx context.Context, conf ConfigLoader) error
 	Collect(ctx context.Context, ch chan<- Message) error
 }
 
 // OutputPlugin interface to represent an output fluent-bit plugin.
 type OutputPlugin interface {
-	Init(ctx context.Context, conf ConfigLoader, cmt *cmetrics.Context) error
+	Init(ctx context.Context, conf ConfigLoader) error
 	Flush(ctx context.Context, ch <-chan Message) error
 }
 

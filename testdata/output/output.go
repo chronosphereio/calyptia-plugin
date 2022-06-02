@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/calyptia/plugin"
-	cmetrics "github.com/calyptia/cmetrics-go"
 )
 
 func init() {
@@ -16,7 +15,7 @@ func init() {
 
 type dummyPlugin struct{}
 
-func (plug dummyPlugin) Init(ctx context.Context, conf plugin.ConfigLoader, cmt *cmetrics.Context) error {
+func (plug dummyPlugin) Init(ctx context.Context, conf plugin.ConfigLoader) error {
 	return nil
 }
 

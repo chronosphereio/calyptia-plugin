@@ -25,7 +25,29 @@ import (
 )
 
 var unregister func()
-var cmt *cmetrics.Context
+
+var counters = struct {
+	Succedded *cmetrics.Counter
+	Failed    *cmetrics.Counter
+}{}
+
+func setupMetrics(cmt *cmetrics.Context, name string) error {
+	var err error
+	counters.Succedded, err = cmt.CounterCreate("fluentbit", "input",
+		"operation_succeeded_total", "Total number of succeeded operations",
+		[]string{name},
+	)
+	if err != nil {
+		return err
+	}
+
+	counters.Failed, err = cmt.CounterCreate("fluentbit", "input",
+		"operation_failed_total", "Total number of failed operations",
+		[]string{name},
+	)
+
+	return err
+}
 
 // FLBPluginRegister registers a plugin in the context of the fluent-bit runtime, a name and description
 // can be provided.
@@ -74,24 +96,32 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 	var err error
 	if theInput != nil {
 		conf := &flbInputConfigLoader{ptr: ptr}
-		cmt, err = input.FLBPluginGetCMetricsContext(ptr)
+		cmt, err := input.FLBPluginGetCMetricsContext(ptr)
 		if err != nil {
 			return input.FLB_ERROR
 		}
-		err = theInput.Init(ctx, conf, cmt)
+		err = setupMetrics(cmt, theName)
+		if err == nil {
+			err = theInput.Init(ctx, conf)
+		}
 	} else {
 		conf := &flbOutputConfigLoader{ptr: ptr}
-		cmt, err = output.FLBPluginGetCMetricsContext(ptr)
+		cmt, err := output.FLBPluginGetCMetricsContext(ptr)
 		if err != nil {
 			return output.FLB_ERROR
 		}
-		err = theOutput.Init(ctx, conf, cmt)
+		err = setupMetrics(cmt, theName)
+		if err == nil {
+			err = theOutput.Init(ctx, conf)
+		}
 	}
 	if err != nil {
+		_ = counters.Failed.Inc(time.Now(), []string{theName})
 		fmt.Fprintf(os.Stderr, "init: %v\n", err)
 		return input.FLB_ERROR
 	}
 
+	_ = counters.Succedded.Inc(time.Now(), []string{theName})
 	return input.FLB_OK
 }
 
@@ -117,6 +147,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		}()
 	})
 	if err != nil {
+		_ = counters.Failed.Inc(time.Now(), []string{theName})
 		fmt.Fprintf(os.Stderr, "run: %s\n", err)
 		return input.FLB_ERROR
 	}
@@ -124,12 +155,14 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 	select {
 	case msg, ok := <-theChannel:
 		if !ok {
+			_ = counters.Succedded.Inc(time.Now(), []string{theName})
 			return input.FLB_OK
 		}
 
 		t := input.FLBTime{Time: msg.Time}
 		b, err := input.NewEncoder().Encode([]any{t, msg.Record})
 		if err != nil {
+			_ = counters.Failed.Inc(time.Now(), []string{theName})
 			fmt.Fprintf(os.Stderr, "encode: %s\n", err)
 			return input.FLB_ERROR
 		}
@@ -143,6 +176,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 	case <-runCtx.Done():
 		err := runCtx.Err()
 		if err != nil && !errors.Is(err, context.Canceled) {
+			_ = counters.Failed.Inc(time.Now(), []string{theName})
 			fmt.Fprintf(os.Stderr, "run: %s\n", err)
 			return input.FLB_ERROR
 		}
@@ -152,6 +186,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		defer runtime.GC()
 	}
 
+	_ = counters.Succedded.Inc(time.Now(), []string{theName})
 	return input.FLB_OK
 }
 
@@ -176,6 +211,7 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 		}()
 	})
 	if err != nil {
+		_ = counters.Failed.Inc(time.Now(), []string{theName})
 		fmt.Fprintf(os.Stderr, "run: %s\n", err)
 		return output.FLB_ERROR
 	}
@@ -184,10 +220,12 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 	case <-runCtx.Done():
 		err = runCtx.Err()
 		if err != nil && !errors.Is(err, context.Canceled) {
+			_ = counters.Failed.Inc(time.Now(), []string{theName})
 			fmt.Fprintf(os.Stderr, "run: %s\n", err)
 			return output.FLB_ERROR
 		}
 
+		_ = counters.Succedded.Inc(time.Now(), []string{theName})
 		return output.FLB_OK
 	default:
 	}
@@ -196,6 +234,7 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 	h := &codec.MsgpackHandle{}
 	err = h.SetBytesExt(reflect.TypeOf(bigEndianTime{}), 0, &bigEndianTime{})
 	if err != nil {
+		_ = counters.Failed.Inc(time.Now(), []string{theName})
 		fmt.Fprintf(os.Stderr, "big endian time bytes ext: %v\n", err)
 		return output.FLB_ERROR
 	}
@@ -207,10 +246,12 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 		case <-runCtx.Done():
 			err := runCtx.Err()
 			if err != nil && !errors.Is(err, context.Canceled) {
+				_ = counters.Failed.Inc(time.Now(), []string{theName})
 				fmt.Fprintf(os.Stderr, "run: %s\n", err)
 				return output.FLB_ERROR
 			}
 
+			_ = counters.Succedded.Inc(time.Now(), []string{theName})
 			return output.FLB_OK
 		default:
 		}
@@ -222,17 +263,20 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 		}
 
 		if err != nil {
+			_ = counters.Failed.Inc(time.Now(), []string{theName})
 			fmt.Fprintf(os.Stderr, "decode: %s\n", err)
 			return output.FLB_ERROR
 		}
 
 		if d := len(entry); d != 2 {
+			_ = counters.Failed.Inc(time.Now(), []string{theName})
 			fmt.Fprintf(os.Stderr, "unexpected entry length: %d\n", d)
 			return output.FLB_ERROR
 		}
 
 		ft, ok := entry[0].(bigEndianTime)
 		if !ok {
+			_ = counters.Failed.Inc(time.Now(), []string{theName})
 			fmt.Fprintf(os.Stderr, "unexpected entry time type: %T\n", entry[0])
 			return output.FLB_ERROR
 		}
@@ -241,6 +285,7 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 
 		recVal, ok := entry[1].(map[any]any)
 		if !ok {
+			_ = counters.Failed.Inc(time.Now(), []string{theName})
 			fmt.Fprintf(os.Stderr, "unexpected entry record type: %T\n", entry[1])
 			return output.FLB_ERROR
 		}
@@ -251,12 +296,14 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 			for k, v := range recVal {
 				key, ok := k.(string)
 				if !ok {
+					_ = counters.Failed.Inc(time.Now(), []string{theName})
 					fmt.Fprintf(os.Stderr, "unexpected record key type: %T\n", k)
 					return output.FLB_ERROR
 				}
 
 				val, ok := v.([]uint8)
 				if !ok {
+					_ = counters.Failed.Inc(time.Now(), []string{theName})
 					fmt.Fprintf(os.Stderr, "unexpected record value type: %T\n", v)
 					return output.FLB_ERROR
 				}
@@ -274,6 +321,7 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 		// C.free(unsafe.Pointer(&clength))
 	}
 
+	_ = counters.Succedded.Inc(time.Now(), []string{theName})
 	return output.FLB_OK
 }
 
@@ -294,6 +342,7 @@ func FLBPluginExit() int {
 		defer close(theChannel)
 	}
 
+	_ = counters.Succedded.Inc(time.Now(), []string{theName})
 	return input.FLB_OK
 }
 
