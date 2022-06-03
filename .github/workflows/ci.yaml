@@ -19,6 +19,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - run: |
+          CMETRICS_VERSION=$(sed -n 's/^ARG CMETRICS_VERSION=\(.*\)/\1/p' testdata/Dockerfile)
+          CMETRICS_RELEASE=$(sed -n 's/^ARG CMETRICS_RELEASE=\(.*\)/\1/p' testdata/Dockerfile)
+          echo "Using release: CMETRICS_RELEASE"
+          echo "Using version: CMETRICS_VERSION"
+          wget https://github.com/calyptia/cmetrics/releases/download/${CMETRICS_RELEASE}/cmetrics_${CMETRICS_VERSION}_${TARGETARCH}-headers.deb
+          wget https://github.com/calyptia/cmetrics/releases/download/${CMETRICS_RELEASE}/cmetrics_${CMETRICS_VERSION}_${TARGETARCH}.deb
+          sudo dpkg -i *.deb
+          rm *.deb
+        shell: bash
+        env:
+          TARGETARCH: amd64
+
       - name: Set up Go
         uses: actions/setup-go@v3
         with:
