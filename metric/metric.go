@@ -1,3 +1,5 @@
+// Package metric provides with Counter and Gauge interfaces.
+// See /cmetric for an implementation using shared memory to cmetrics library.
 package metric
 
 // Counter describes a metric that accumulates values monotonically.

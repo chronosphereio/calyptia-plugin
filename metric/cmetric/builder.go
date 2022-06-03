@@ -3,7 +3,7 @@ package cmetric
 import (
 	"fmt"
 
-	"github.com/calyptia/cmetrics-go"
+	cmetrics "github.com/calyptia/cmetrics-go"
 	"github.com/calyptia/plugin/metric"
 )
 
