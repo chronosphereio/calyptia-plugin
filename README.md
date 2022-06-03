@@ -98,6 +98,63 @@ func (plug dummyPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) e
 func main() {}
 ```
 
+## Adding metrics
+
+Plugin can share their metrics over fluent-bit proxy interface.
+As an example, the following are the minimum steps for sharing plugin's metrics,
+Using a [metric interface](./metric/metric.go) to implement the plugin's metrics.
+
+```go
+package main
+
+import (
+ "context"
+ "errors"
+ "time"
+
+ "github.com/calyptia/plugin"
+ "github.com/calyptia/plugin/metric"
+)
+
+type dummyPlugin struct {
+ counterExample metric.Counter
+}
+
+func (plug *dummyPlugin) Init(ctx context.Context, conf plugin.ConfigLoader, metrics plugin.Metrics) error {
+ plug.counterExample = metrics.NewCounter("example_metric_total", "Total number of example metrics", "go-test-input-plugin")
+ return nil
+}
+
+
+func (plug dummyPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) error {
+ tick := time.NewTicker(time.Second)
+
+ for {
+  select {
+   case <-ctx.Done():
+    err := ctx.Err()
+    if err != nil && !errors.Is(err, context.Canceled) {
+     return err
+    }
+
+    return nil
+   case <-tick.C:
+    plug.collectExample.Add(1)
+
+    ch <- plugin.Message{
+     Time: time.Now(),
+     Record: map[string]string{
+      "message": "hello from go-test-input-plugin",
+      "foo":     plug.foo,
+     },
+    }
+  }
+ }
+}
+
+func main() {}
+```
+
 ### Building a plugin
 
 A plugin can be built locally using go build as:
