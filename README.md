@@ -143,7 +143,7 @@ func (plug dummyPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) e
 
     return nil
    case <-tick.C:
-    plug.collectExample.Add(1)
+    plug.counterExample.Add(1)
 
     ch <- plugin.Message{
      Time: time.Now(),
