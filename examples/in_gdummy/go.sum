@@ -1,5 +1,6 @@
 github.com/calyptia/cmetrics-go v0.1.6-0.20220525100532-d30aeea26c0f h1:2lHEaKDVVr2Z1dI9JcwJXX5zsQSVP0eNuBE6bkEi4CA=
 github.com/calyptia/cmetrics-go v0.1.6-0.20220525100532-d30aeea26c0f/go.mod h1:K1IEPgICDtD4mJW7RVhfG4BkCywnjCdYZwbKs0jSw/U=
+github.com/calyptia/cmetrics-go v0.1.6/go.mod h1:K1IEPgICDtD4mJW7RVhfG4BkCywnjCdYZwbKs0jSw/U=
 github.com/fluent/fluent-bit-go v0.0.0-20211213025035-0be1ffb0c49b h1:IbixhsdiEE03BnEAWop5eeShptYKfru5Dg9HaPBm9ms=
 github.com/fluent/fluent-bit-go v0.0.0-20211213025035-0be1ffb0c49b/go.mod h1:L92h+dgwElEyUuShEwjbiHjseW410WIcNz+Bjutc8YQ=
 github.com/ugorji/go v1.1.7 h1:/68gy2h+1mWMrwZFeD1kQialdSzAb432dtpeJ42ovdo=
