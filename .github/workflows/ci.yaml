@@ -19,6 +19,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - name: Install cmetrics library
+        run: |
+          curl -L https://github.com/calyptia/cmetrics/releases/download/${CMETRICS_RELEASE}/cmetrics_${CMETRICS_VERSION}_${ARCH}-headers.deb  --output external/cmetrics_${CMETRICS_VERSION}_${ARCH}-headers.deb
+          curl -L https://github.com/calyptia/cmetrics/releases/download/${CMETRICS_RELEASE}/cmetrics_${CMETRICS_VERSION}_${ARCH}.deb --output external/cmetrics_${CMETRICS_VERSION}_${ARCH}.deb
+          sudo dpkg -i external/*.deb
+        env:
+          CMETRICS_VERSION: "0.3.3"
+          CMETRICS_RELEASE: "v0.3.3"
+          ARCH: "amd64"
+
       - name: Set up Go
         uses: actions/setup-go@v3
         with:

@@ -18,11 +18,15 @@ import (
 	"unsafe"
 
 	"github.com/calyptia/plugin/input"
+	metricbuilder "github.com/calyptia/plugin/metric/cmetric"
 	"github.com/calyptia/plugin/output"
 	"github.com/ugorji/go/codec"
+
+	cmetrics "github.com/calyptia/cmetrics-go"
 )
 
 var unregister func()
+var cmt *cmetrics.Context
 
 // FLBPluginRegister registers a plugin in the context of the fluent-bit runtime, a name and description
 // can be provided.
@@ -71,10 +75,19 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 	var err error
 	if theInput != nil {
 		conf := &flbInputConfigLoader{ptr: ptr}
-		err = theInput.Init(ctx, conf)
+		cmt, err = input.FLBPluginGetCMetricsContext(ptr)
+		if err != nil {
+			return input.FLB_ERROR
+		}
+
+		err = theInput.Init(ctx, conf, makeMetrics(cmt))
 	} else {
 		conf := &flbOutputConfigLoader{ptr: ptr}
-		err = theOutput.Init(ctx, conf)
+		cmt, err = output.FLBPluginGetCMetricsContext(ptr)
+		if err != nil {
+			return output.FLB_ERROR
+		}
+		err = theOutput.Init(ctx, conf, makeMetrics(cmt))
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "init: %v\n", err)
@@ -300,4 +313,15 @@ type flbOutputConfigLoader struct {
 
 func (f *flbOutputConfigLoader) String(key string) string {
 	return output.FLBPluginConfigKey(f.ptr, key)
+}
+
+func makeMetrics(cmp *cmetrics.Context) Metrics {
+	return &metricbuilder.Builder{
+		Namespace: "fluentbit",
+		SubSystem: "plugin",
+		Context:   cmp,
+		OnError: func(err error) {
+			fmt.Fprintf(os.Stderr, "metrics: %s\n", err)
+		},
+	}
 }

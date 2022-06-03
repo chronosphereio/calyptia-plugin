@@ -26,6 +26,8 @@ import "C"
 
 import (
 	"unsafe"
+
+	cmetrics "github.com/calyptia/cmetrics-go"
 )
 
 // Define constants matching Fluent Bit core
@@ -68,4 +70,10 @@ func FLBPluginConfigKey(plugin unsafe.Pointer, key string) string {
 	value := C.GoString(C.input_get_property(_key, plugin))
 	C.free(unsafe.Pointer(_key))
 	return value
+}
+
+func FLBPluginGetCMetricsContext(plugin unsafe.Pointer) (*cmetrics.Context, error) {
+	ctx := C.input_get_cmt_instance(plugin)
+	cmt := unsafe.Pointer(ctx)
+	return cmetrics.NewContextFromCMTPointer(cmt)
 }

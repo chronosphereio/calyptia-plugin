@@ -20,9 +20,13 @@
 #ifndef FLBGO_INPUT_H
 #define FLBGO_INPUT_H
 
+#include <stdio.h>
+
 struct flb_api {
     char *_;
     char *(*input_get_property) (char *, void *);
+    void *__;
+    void *(*input_get_cmt_instance) (void *);
 };
 
 struct flb_plugin_proxy_context {
@@ -43,6 +47,12 @@ char *input_get_property(char *key, void *plugin)
 {
     struct flbgo_input_plugin *p = plugin;
     return p->api->input_get_property(key, p->i_ins);
+}
+
+void *input_get_cmt_instance(void *plugin)
+{
+    struct flbgo_input_plugin *p = plugin;
+    return p->api->input_get_cmt_instance(p->i_ins);
 }
 
 #endif

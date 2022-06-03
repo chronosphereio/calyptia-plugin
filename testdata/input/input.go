@@ -6,22 +6,25 @@ import (
 	"time"
 
 	"github.com/calyptia/plugin"
+	"github.com/calyptia/plugin/metric"
 )
 
 func init() {
-	plugin.RegisterInput("go-test-input-plugin", "Golang input plugin for testing", &dummyPlugin{})
+	plugin.RegisterInput("go-test-input-plugin", "Golang input plugin for testing", &inputPlugin{})
 }
 
-type dummyPlugin struct {
-	foo string
+type inputPlugin struct {
+	foo            string
+	collectCounter metric.Counter
 }
 
-func (plug *dummyPlugin) Init(ctx context.Context, conf plugin.ConfigLoader) error {
+func (plug *inputPlugin) Init(ctx context.Context, conf plugin.ConfigLoader, metrics plugin.Metrics) error {
 	plug.foo = conf.String("foo")
+	plug.collectCounter = metrics.NewCounter("collect_total", "Total number of collects", "go-test-input-plugin")
 	return nil
 }
 
-func (plug dummyPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) error {
+func (plug inputPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) error {
 	tick := time.NewTicker(time.Second)
 
 	for {
@@ -34,6 +37,8 @@ func (plug dummyPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) e
 
 			return nil
 		case <-tick.C:
+			plug.collectCounter.Add(1)
+
 			ch <- plugin.Message{
 				Time: time.Now(),
 				Record: map[string]string{
