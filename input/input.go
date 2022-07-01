@@ -38,6 +38,11 @@ const (
 
 	FLB_PROXY_INPUT_PLUGIN = C.FLB_PROXY_INPUT_PLUGIN
 	FLB_PROXY_GOLANG       = C.FLB_PROXY_GOLANG
+
+	FLB_LOG_ERROR  = C.FLB_LOG_ERROR
+	FLB_LOG_WARN   = C.FLB_LOG_WARN
+	FLB_LOG_INFO   = C.FLB_LOG_INFO
+	FLB_LOG_DEBUG  = C.FLB_LOG_DEBUG
 )
 
 // Local type to define a plugin definition
@@ -76,4 +81,10 @@ func FLBPluginGetCMetricsContext(plugin unsafe.Pointer) (*cmetrics.Context, erro
 	ctx := C.input_get_cmt_instance(plugin)
 	cmt := unsafe.Pointer(ctx)
 	return cmetrics.NewContextFromCMTPointer(cmt)
+}
+
+func FLBPluginLogPrint(plugin unsafe.Pointer, log_level C.int, message string) {
+	_message := C.CString(message)
+	C.input_log_print_novar(plugin, log_level, _message)
+	C.free(unsafe.Pointer(_message))
 }

@@ -29,6 +29,12 @@
 #define FLB_PROXY_OUTPUT_PLUGIN    2
 #define FLB_PROXY_GOLANG          11
 
+/* Message Types */
+#define FLB_LOG_ERROR   1
+#define FLB_LOG_WARN    2
+#define FLB_LOG_INFO    3  /* default */
+#define FLB_LOG_DEBUG   4
+
 /* This structure is used for registration.
  * It matches the one in flb_plugin_proxy.h in fluent-bit source code.
  */
