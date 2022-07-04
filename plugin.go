@@ -52,6 +52,14 @@ type ConfigLoader interface {
 	String(key string) string
 }
 
+// Logger interface to represent a fluent-bit logging mechanism.
+type Logger interface {
+	Error(format string, a ...any)
+	Warn(format string, a ...any)
+	Info(format string, a ...any)
+	Debug(format string, a ...any)
+}
+
 // Metrics builder.
 type Metrics interface {
 	NewCounter(name, desc string, labelValues ...string) metric.Counter
