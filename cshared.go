@@ -376,3 +376,7 @@ func makeMetrics(cmp *cmetrics.Context) Metrics {
 		},
 	}
 }
+
+func GetLogger() Logger {
+	return logger
+}
