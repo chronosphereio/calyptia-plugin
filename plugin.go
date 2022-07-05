@@ -35,21 +35,35 @@ func init() {
 	initWG.Add(1)
 }
 
+type Fluentbit struct {
+  Conf ConfigLoader
+  Metrics Metrics
+  Logger Logger
+}
+
 // InputPlugin interface to represent an input fluent-bit plugin.
 type InputPlugin interface {
-	Init(ctx context.Context, conf ConfigLoader, metrics Metrics) error
+	Init(ctx context.Context, fbit *Fluentbit) error
 	Collect(ctx context.Context, ch chan<- Message) error
 }
 
 // OutputPlugin interface to represent an output fluent-bit plugin.
 type OutputPlugin interface {
-	Init(ctx context.Context, conf ConfigLoader, metrics Metrics) error
+	Init(ctx context.Context, fbit *Fluentbit) error
 	Flush(ctx context.Context, ch <-chan Message) error
 }
 
 // ConfigLoader interface to represent a fluent-bit configuration loader.
 type ConfigLoader interface {
 	String(key string) string
+}
+
+// Logger interface to represent a fluent-bit logging mechanism.
+type Logger interface {
+	Error(format string, a ...any)
+	Warn(format string, a ...any)
+	Info(format string, a ...any)
+	Debug(format string, a ...any)
 }
 
 // Metrics builder.

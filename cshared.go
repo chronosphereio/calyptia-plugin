@@ -27,6 +27,7 @@ import (
 
 var unregister func()
 var cmt *cmetrics.Context
+var logger Logger
 
 // FLBPluginRegister registers a plugin in the context of the fluent-bit runtime, a name and description
 // can be provided.
@@ -79,15 +80,27 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 		if err != nil {
 			return input.FLB_ERROR
 		}
+		logger = &flbInputLogger{ptr: ptr}
+		fbit := &Fluentbit{
+			Conf: conf,
+			Metrics: makeMetrics(cmt),
+			Logger: logger,
+		}
 
-		err = theInput.Init(ctx, conf, makeMetrics(cmt))
+		err = theInput.Init(ctx, fbit)
 	} else {
 		conf := &flbOutputConfigLoader{ptr: ptr}
 		cmt, err = output.FLBPluginGetCMetricsContext(ptr)
 		if err != nil {
 			return output.FLB_ERROR
 		}
-		err = theOutput.Init(ctx, conf, makeMetrics(cmt))
+		logger = &flbOutputLogger{ptr: ptr}
+		fbit := &Fluentbit{
+			Conf: conf,
+			Metrics: makeMetrics(cmt),
+			Logger: logger,
+		}
+		err = theOutput.Init(ctx, fbit)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "init: %v\n", err)
@@ -313,6 +326,54 @@ type flbOutputConfigLoader struct {
 
 func (f *flbOutputConfigLoader) String(key string) string {
 	return output.FLBPluginConfigKey(f.ptr, key)
+}
+
+type flbInputLogger struct {
+	ptr unsafe.Pointer
+}
+
+func (f *flbInputLogger) Error(format string, a ...any) {
+	message := fmt.Sprintf(format, a...)
+	input.FLBPluginLogPrint(f.ptr, input.FLB_LOG_ERROR, message)
+}
+
+func (f *flbInputLogger) Warn(format string, a ...any) {
+	message := fmt.Sprintf(format, a...)
+	input.FLBPluginLogPrint(f.ptr, input.FLB_LOG_WARN, message)
+}
+
+func (f *flbInputLogger) Info(format string, a ...any) {
+	message := fmt.Sprintf(format, a...)
+	input.FLBPluginLogPrint(f.ptr, input.FLB_LOG_INFO, message)
+}
+
+func (f *flbInputLogger) Debug(format string, a ...any) {
+	message := fmt.Sprintf(format, a...)
+	input.FLBPluginLogPrint(f.ptr, input.FLB_LOG_DEBUG, message)
+}
+
+type flbOutputLogger struct {
+	ptr unsafe.Pointer
+}
+
+func (f *flbOutputLogger) Error(format string, a ...any) {
+	message := fmt.Sprintf(format, a...)
+	output.FLBPluginLogPrint(f.ptr, output.FLB_LOG_ERROR, message)
+}
+
+func (f *flbOutputLogger) Warn(format string, a ...any) {
+	message := fmt.Sprintf(format, a...)
+	output.FLBPluginLogPrint(f.ptr, output.FLB_LOG_WARN, message)
+}
+
+func (f *flbOutputLogger) Info(format string, a ...any) {
+	message := fmt.Sprintf(format, a...)
+	output.FLBPluginLogPrint(f.ptr, output.FLB_LOG_INFO, message)
+}
+
+func (f *flbOutputLogger) Debug(format string, a ...any) {
+	message := fmt.Sprintf(format, a...)
+	output.FLBPluginLogPrint(f.ptr, output.FLB_LOG_DEBUG, message)
 }
 
 func makeMetrics(cmp *cmetrics.Context) Metrics {

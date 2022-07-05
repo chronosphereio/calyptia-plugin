@@ -16,11 +16,13 @@ func init() {
 type inputPlugin struct {
 	foo            string
 	collectCounter metric.Counter
+	log            plugin.Logger
 }
 
-func (plug *inputPlugin) Init(ctx context.Context, conf plugin.ConfigLoader, metrics plugin.Metrics) error {
-	plug.foo = conf.String("foo")
-	plug.collectCounter = metrics.NewCounter("collect_total", "Total number of collects", "go-test-input-plugin")
+func (plug *inputPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) error {
+	plug.foo = fbit.Conf.String("foo")
+	plug.collectCounter = fbit.Metrics.NewCounter("collect_total", "Total number of collects", "go-test-input-plugin")
+	plug.log = fbit.Logger
 	return nil
 }
 
@@ -32,12 +34,14 @@ func (plug inputPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) e
 		case <-ctx.Done():
 			err := ctx.Err()
 			if err != nil && !errors.Is(err, context.Canceled) {
+				plug.log.Error("[go-test-input-plugin] operation failed")
 				return err
 			}
 
 			return nil
 		case <-tick.C:
 			plug.collectCounter.Add(1)
+			plug.log.Info("[go-test-input-plugin] operation succeeded")
 
 			ch <- plugin.Message{
 				Time: time.Now(),

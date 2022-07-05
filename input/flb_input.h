@@ -27,6 +27,9 @@ struct flb_api {
     char *(*input_get_property) (char *, void *);
     void *__;
     void *(*input_get_cmt_instance) (void *);
+    void (*log_print) (int, const char*, int, const char*, ...);
+    int (*input_log_check) (void *, int);
+    int ___;
 };
 
 struct flb_plugin_proxy_context {
@@ -53,6 +56,14 @@ void *input_get_cmt_instance(void *plugin)
 {
     struct flbgo_input_plugin *p = plugin;
     return p->api->input_get_cmt_instance(p->i_ins);
+}
+
+void input_log_print_novar(void *plugin, int log_level, const char* message)
+{
+    struct flbgo_input_plugin *p = plugin;
+    if (p->api->input_log_check(p->i_ins, log_level)) {
+        p->api->log_print(log_level, NULL, 0, message);
+    }
 }
 
 #endif
