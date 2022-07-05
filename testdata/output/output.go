@@ -18,8 +18,8 @@ type outputPlugin struct {
 	flushCounter metric.Counter
 }
 
-func (plug *outputPlugin) Init(ctx context.Context, conf plugin.ConfigLoader, metrics plugin.Metrics) error {
-	plug.flushCounter = metrics.NewCounter("flush_total", "Total number of flushes", "go-test-output-plugin")
+func (plug *outputPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) error {
+	plug.flushCounter = fbit.Metrics.NewCounter("flush_total", "Total number of flushes", "go-test-output-plugin")
 	return nil
 }
 

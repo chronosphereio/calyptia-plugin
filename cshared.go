@@ -81,8 +81,13 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 			return input.FLB_ERROR
 		}
 		logger = &flbInputLogger{ptr: ptr}
+		fbit := &Fluentbit{
+			Conf: conf,
+			Metrics: makeMetrics(cmt),
+			Logger: logger,
+		}
 
-		err = theInput.Init(ctx, conf, makeMetrics(cmt))
+		err = theInput.Init(ctx, fbit)
 	} else {
 		conf := &flbOutputConfigLoader{ptr: ptr}
 		cmt, err = output.FLBPluginGetCMetricsContext(ptr)
@@ -90,7 +95,12 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 			return output.FLB_ERROR
 		}
 		logger = &flbOutputLogger{ptr: ptr}
-		err = theOutput.Init(ctx, conf, makeMetrics(cmt))
+		fbit := &Fluentbit{
+			Conf: conf,
+			Metrics: makeMetrics(cmt),
+			Logger: logger,
+		}
+		err = theOutput.Init(ctx, fbit)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "init: %v\n", err)
@@ -375,8 +385,4 @@ func makeMetrics(cmp *cmetrics.Context) Metrics {
 			fmt.Fprintf(os.Stderr, "metrics: %s\n", err)
 		},
 	}
-}
-
-func GetLogger() Logger {
-	return logger
 }

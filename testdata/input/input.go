@@ -18,9 +18,9 @@ type inputPlugin struct {
 	collectCounter metric.Counter
 }
 
-func (plug *inputPlugin) Init(ctx context.Context, conf plugin.ConfigLoader, metrics plugin.Metrics) error {
-	plug.foo = conf.String("foo")
-	plug.collectCounter = metrics.NewCounter("collect_total", "Total number of collects", "go-test-input-plugin")
+func (plug *inputPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) error {
+	plug.foo = fbit.Conf.String("foo")
+	plug.collectCounter = fbit.Metrics.NewCounter("collect_total", "Total number of collects", "go-test-input-plugin")
 	return nil
 }
 

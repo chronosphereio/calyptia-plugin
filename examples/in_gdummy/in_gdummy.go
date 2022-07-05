@@ -20,10 +20,10 @@ type gdummyPlugin struct {
 	counterFailure metric.Counter
 }
 
-func (plug *gdummyPlugin) Init(ctx context.Context, conf plugin.ConfigLoader, metrics plugin.Metrics) error {
-	plug.counterSuccess = metrics.NewCounter("operation_succeeded_total", "Total number of succeeded operations", "gdummy")
-	plug.counterFailure = metrics.NewCounter("operation_failed_total", "Total number of failed operations", "gdummy")
-	logger = plugin.GetLogger()
+func (plug *gdummyPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) error {
+	plug.counterSuccess = fbit.Metrics.NewCounter("operation_succeeded_total", "Total number of succeeded operations", "gdummy")
+	plug.counterFailure = fbit.Metrics.NewCounter("operation_failed_total", "Total number of failed operations", "gdummy")
+	logger = fbit.Logger
 
 	return nil
 }
