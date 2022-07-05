@@ -9,8 +9,6 @@ import (
 	"github.com/calyptia/plugin/metric"
 )
 
-var logger plugin.Logger
-
 func init() {
 	plugin.RegisterInput("gdummy", "dummy GO!", &gdummyPlugin{})
 }
@@ -18,12 +16,13 @@ func init() {
 type gdummyPlugin struct {
 	counterSuccess metric.Counter
 	counterFailure metric.Counter
+	log            plugin.Logger
 }
 
 func (plug *gdummyPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) error {
 	plug.counterSuccess = fbit.Metrics.NewCounter("operation_succeeded_total", "Total number of succeeded operations", "gdummy")
 	plug.counterFailure = fbit.Metrics.NewCounter("operation_failed_total", "Total number of failed operations", "gdummy")
-	logger = fbit.Logger
+	plug.log = fbit.Logger
 
 	return nil
 }
@@ -37,7 +36,7 @@ func (plug gdummyPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) 
 			err := ctx.Err()
 			if err != nil && !errors.Is(err, context.Canceled) {
 				plug.counterFailure.Add(1)
-				logger.Error("[gdummy] operation failed")
+				plug.log.Error("[gdummy] operation failed")
 
 				return err
 			}
@@ -45,7 +44,7 @@ func (plug gdummyPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) 
 			return nil
 		case <-tick.C:
 			plug.counterSuccess.Add(1)
-			logger.Debug("[gdummy] operation succeeded")
+			plug.log.Debug("[gdummy] operation succeeded")
 
 			ch <- plugin.Message{
 				Time: time.Now(),
