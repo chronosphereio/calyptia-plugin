@@ -28,6 +28,7 @@ func (plug *outputPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) erro
 func (plug outputPlugin) Flush(ctx context.Context, ch <-chan plugin.Message) error {
 	f, err := os.Create("/fluent-bit/etc/output.txt")
 	if err != nil {
+		plug.log.Error("[go-test-output-plugin] operation failed. reason %w", err)
 		return fmt.Errorf("could not open output.txt: %w", err)
 	}
 
@@ -39,6 +40,7 @@ func (plug outputPlugin) Flush(ctx context.Context, ch <-chan plugin.Message) er
 
 		_, err := fmt.Fprintf(f, "message=\"got record\" tag=%s time=%s record=%+v\n", msg.Tag(), msg.Time.Format(time.RFC3339), msg.Record)
 		if err != nil {
+			plug.log.Error("[go-test-output-plugin] operation failed. reason %w", err)
 			return fmt.Errorf("could not write to output.txt: %w", err)
 		}
 	}
