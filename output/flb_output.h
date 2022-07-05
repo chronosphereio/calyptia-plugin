@@ -26,7 +26,6 @@ struct flb_api {
     void *(*output_get_cmt_instance) (void *);
     void *__;
     void (*log_print) (int, const char*, int, const char*, ...);
-    int (*log_check) (int);
     int ___;
     int (*output_log_check) (void *, int);
 };
