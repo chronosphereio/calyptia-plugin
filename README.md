@@ -63,8 +63,8 @@ type dummyPlugin struct {
 
 // Init An instance of the configuration loader will be passed to the Init method so all the required
 // configuration entries can be retrieved within the plugin context.
-func (plug *dummyPlugin) Init(ctx context.Context, conf plugin.ConfigLoader, metrics plugin.Metrics) error {
-	plug.foo = conf.String("foo")
+func (plug *dummyPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) error {
+	plug.foo = fbit.Conf.String("foo")
 	return nil
 }
 
@@ -124,8 +124,8 @@ type dummyPlugin struct {
 	counterExample metric.Counter
 }
 
-func (plug *dummyPlugin) Init(ctx context.Context, conf plugin.ConfigLoader, metrics plugin.Metrics) error {
-	plug.counterExample = metrics.NewCounter("example_metric_total", "Total number of example metrics", "go-test-input-plugin")
+func (plug *dummyPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) error {
+	plug.counterExample = fbit.Metrics.NewCounter("example_metric_total", "Total number of example metrics", "go-test-input-plugin")
 	return nil
 }
 
