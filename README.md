@@ -87,7 +87,7 @@ func main() {
 A plugin can be built locally using go build as:
 
 ```bash
-go build -trimpath -buildmode c-shared -o ./bin/go-test-input-plugin.so .
+go build -trimpath -buildmode c-shared -o ./go-test-input-plugin.so .
 ```
 
 Then create a local fluent-bit.conf as follows:
@@ -107,13 +107,13 @@ Also a plugins.conf definition has to be provided, as follows:
 
 ```ini
 [PLUGINS]
-    Path /fluent-bit/etc/go-test-input-plugin.so
+    Path /fluent-bit/lib/go-test-input-plugin.so
 ```
 
 Run the plugin in a docker container as follows:
 
 ```shell
-docker run -v $(pwd)/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro -v $(pwd)/plugins.conf:/fluent-bit/etc/plugins.conf:ro  ghcr.io/fluent/fluent-bit/master:latest
+docker run -v $(pwd)/go-test-input-plugin.so:/fluent-bit/lib/go-test-input-plugin.so -v $(pwd)/examples/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro -v $(pwd)/examples/plugins.conf:/fluent-bit/etc/plugins.conf:ro ghcr.io/fluent/fluent-bit/master:latest
 ```
 
 For further examples, please check the [examples](./examples) or [testdata](./testdata) folders.
