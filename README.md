@@ -90,7 +90,37 @@ A plugin can be built locally using go build as:
 go build -trimpath -buildmode c-shared -o ./go-test-input-plugin.so .
 ```
 
-Then create a local fluent-bit.conf as follows:
+Or compiled to linux/amd64 target from darwin/arm64 using [zig](https://ziglang.org/learn/overview/#zig-is-also-a-c-compiler)
+
+```bash
+CGO_ENABLED=1 \
+GOOS=linux \
+GOARCH=amd64 \
+CC="zig cc -target x86_64-linux-gnu -isystem /usr/include -L/usr/lib/x86_64-linux-gnu" \
+CXX="zig c++ -target x86_64-linux-gnu -isystem /usr/include -L/usr/lib/x86_64-linux-gnu" \
+go build -buildmode=c-shared -trimpath -o ./my-plugin-linux-amd64.so ./...
+```
+Or using a Dockerfile as follows:
+
+```dockerfile
+FROM golang:latest AS builder
+
+WORKDIR /fluent-bit
+COPY go.mod .
+COPY go.sum .
+RUN go mod download
+RUN go mod verify
+COPY . .
+RUN go build -trimpath -buildmode c-shared -o ./bin/go-test-input-plugin.so .
+
+FROM ghcr.io/fluent/fluent-bit/unstable:latest-debug
+COPY --from=builder /fluent-bit/bin/go-test-input-plugin.so /fluent-bit/etc/
+
+ENTRYPOINT [ "/fluent-bit/bin/fluent-bit" ]
+CMD [ "/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf" ]
+```
+
+You need to create a local fluent-bit.conf as follows:
 
 ```ini
 [SERVICE]
@@ -103,17 +133,25 @@ Then create a local fluent-bit.conf as follows:
     Tag  test-input
 ```
 
-Also a plugins.conf definition has to be provided, as follows:
+Also, a plugins.conf definition has to be provided:
 
 ```ini
 [PLUGINS]
     Path /fluent-bit/lib/go-test-input-plugin.so
 ```
 
-Run the plugin in a docker container as follows:
+Run the plugin in a docker container as follows, if you are using
+a locally built plugin
 
 ```shell
 docker run -v $(pwd)/go-test-input-plugin.so:/fluent-bit/lib/go-test-input-plugin.so -v $(pwd)/examples/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro -v $(pwd)/examples/plugins.conf:/fluent-bit/etc/plugins.conf:ro ghcr.io/fluent/fluent-bit/master:latest
+```
+
+If using the docker build, run it as follows:
+
+```shell
+docker build -t go-test-input-plugin:main .
+docker run -v $(pwd)/examples/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro -v $(pwd)/examples/plugins.conf:/fluent-bit/etc/plugins.conf:ro  go-test-input-plugin:main
 ```
 
 For further examples, please check the [examples](./examples) or [testdata](./testdata) folders.
