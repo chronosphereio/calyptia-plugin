@@ -98,7 +98,7 @@ GOOS=linux \
 GOARCH=amd64 \
 CC="zig cc -target x86_64-linux-gnu -isystem /usr/include -L/usr/lib/x86_64-linux-gnu" \
 CXX="zig c++ -target x86_64-linux-gnu -isystem /usr/include -L/usr/lib/x86_64-linux-gnu" \
-go build -buildmode=c-shared -trimpath -o ./my-plugin-linux-amd64.so ./...
+go build -buildmode=c-shared -trimpath -o ./go-test-input-plugin.so ./...
 ```
 Or using a Dockerfile as follows:
 
