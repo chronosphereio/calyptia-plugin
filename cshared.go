@@ -126,7 +126,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 	var err error
 	once.Do(func() {
 		runCtx, runCancel = context.WithCancel(context.Background())
-		theChannel = make(chan Message, 1)
+		theChannel = make(chan Message)
 		go func() {
 			err = theInput.Collect(runCtx, theChannel)
 		}()
@@ -185,7 +185,7 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 	var err error
 	once.Do(func() {
 		runCtx, runCancel = context.WithCancel(context.Background())
-		theChannel = make(chan Message, 1)
+		theChannel = make(chan Message)
 		go func() {
 			err = theOutput.Flush(runCtx, theChannel)
 		}()
