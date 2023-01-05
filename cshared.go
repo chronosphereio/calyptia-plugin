@@ -6,6 +6,7 @@ package plugin
 import "C"
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -133,7 +134,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 	var err error
 	once.Do(func() {
 		runCtx, runCancel = context.WithCancel(context.Background())
-		theChannel = make(chan Message)
+		theChannel = make(chan Message, 16)
 		go func() {
 			err = theInput.Collect(runCtx, theChannel)
 		}()
@@ -143,38 +144,44 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		return input.FLB_ERROR
 	}
 
-	select {
-	case msg, ok := <-theChannel:
-		if !ok {
-			return input.FLB_OK
+	buf := bytes.NewBuffer([]byte{})
+
+	for loop := true; loop; {
+		select {
+		case msg, ok := <-theChannel:
+			if !ok {
+				return input.FLB_ERROR
+			}
+
+			t := input.FLBTime{Time: msg.Time}
+			b, err := input.NewEncoder().Encode([]any{t, msg.Record})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "encode: %s\n", err)
+				return input.FLB_ERROR
+			}
+			buf.Grow(len(b))
+			buf.Write(b)
+		default:
+			loop = false
+		case <-runCtx.Done():
+			err := runCtx.Err()
+			if err != nil && !errors.Is(err, context.Canceled) {
+				fmt.Fprintf(os.Stderr, "run: %s\n", err)
+				return input.FLB_ERROR
+			}
+			// enforce a runtime gc, to prevent the thread finalizer on
+			// fluent-bit to kick in before any remaining data has not been GC'ed
+			// causing a sigsegv.
+			defer runtime.GC()
+			loop = false
 		}
-
-		t := input.FLBTime{Time: msg.Time}
-		b, err := input.NewEncoder().Encode([]any{t, msg.Record})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "encode: %s\n", err)
-			return input.FLB_ERROR
-		}
-
-		cdata := C.CBytes(b)
-
-		*data = cdata
-		*csize = C.size_t(len(b))
-
-		// C.free(unsafe.Pointer(cdata))
-	case <-runCtx.Done():
-		err := runCtx.Err()
-		if err != nil && !errors.Is(err, context.Canceled) {
-			fmt.Fprintf(os.Stderr, "run: %s\n", err)
-			return input.FLB_ERROR
-		}
-		// enforce a runtime gc, to prevent the thread finalizer on
-		// fluent-bit to kick in before any remaining data has not been GC'ed
-		// causing a sigsegv.
-		defer runtime.GC()
-	default:
-		break
 	}
+
+	b := buf.Bytes()
+	cdata := C.CBytes(b)
+
+	*data = cdata
+	*csize = C.size_t(len(b))
 
 	return input.FLB_OK
 }
