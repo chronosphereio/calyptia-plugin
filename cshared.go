@@ -134,7 +134,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 	var err error
 	once.Do(func() {
 		runCtx, runCancel = context.WithCancel(context.Background())
-		theChannel = make(chan Message, 16)
+		theChannel = make(chan Message, 256)
 		go func() {
 			err = theInput.Collect(runCtx, theChannel)
 		}()
