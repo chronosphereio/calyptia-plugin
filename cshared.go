@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -32,6 +33,7 @@ var (
 	unregister func()
 	cmt        *cmetrics.Context
 	logger     Logger
+	buflock    sync.Mutex
 )
 
 // FLBPluginRegister registers a plugin in the context of the fluent-bit runtime, a name and description
@@ -134,10 +136,34 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 	var err error
 	once.Do(func() {
 		runCtx, runCancel = context.WithCancel(context.Background())
-		theChannel = make(chan Message, 256)
+		// we need to configure this part....
+		theChannel = make(chan Message, 300000)
+		// do we need to buffer this part???
+		cbuf := make(chan Message, 16)
+
 		go func() {
-			err = theInput.Collect(runCtx, theChannel)
+			err = theInput.Collect(runCtx, cbuf)
 		}()
+		go func(cbuf chan Message) {
+			t := time.NewTicker(1 * time.Second)
+			for {
+				buflock.Lock()
+				select {
+				case msg, ok := <-cbuf:
+					if !ok {
+						continue
+					}
+					buflock.Unlock()
+					theChannel <- msg
+					buflock.Lock()
+				case <-t.C:
+					buflock.Unlock()
+					buflock.Lock()
+				default:
+				}
+				buflock.Unlock()
+			}
+		}(cbuf)
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "run: %s\n", err)
@@ -145,8 +171,9 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 	}
 
 	buf := bytes.NewBuffer([]byte{})
+	buflock.Lock()
 
-	for loop := true; loop; {
+	for loop := len(theChannel) > 0; loop; {
 		select {
 		case msg, ok := <-theChannel:
 			if !ok {
@@ -176,12 +203,14 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 			loop = false
 		}
 	}
+	buflock.Unlock()
 
-	b := buf.Bytes()
-	cdata := C.CBytes(b)
-
-	*data = cdata
-	*csize = C.size_t(len(b))
+	if buf.Len() > 0 {
+		b := buf.Bytes()
+		cdata := C.CBytes(b)
+		*data = cdata
+		*csize = C.size_t(len(b))
+	}
 
 	return input.FLB_OK
 }
