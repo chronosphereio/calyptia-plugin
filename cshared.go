@@ -170,6 +170,13 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 	return input.FLB_OK
 }
 
+// FLBPluginInputCleanupCallback releases the memory used during the input callback
+//export FLBPluginInputCleanupCallback
+func FLBPluginInputCleanupCallback(data unsafe.Pointer) int {
+	C.free(data)
+	return input.FLB_OK
+}
+
 // FLBPluginFlush callback gets invoked by the fluent-bit runtime once there is data for the corresponding
 // plugin in the pipeline, a data pointer, length and a tag are passed to the plugin interface implementation.
 //export FLBPluginFlush
