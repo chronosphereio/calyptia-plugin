@@ -19,8 +19,8 @@ RUN go mod verify
 
 COPY . .
 
-ADD https://github.com/calyptia/cmetrics/releases/download/${CMETRICS_RELEASE}/cmetrics_${CMETRICS_VERSION}_${PACKAGEARCH}-headers.deb external/
-ADD https://github.com/calyptia/cmetrics/releases/download/${CMETRICS_RELEASE}/cmetrics_${CMETRICS_VERSION}_${PACKAGEARCH}.deb external/
+ADD https://github.com/fluent/cmetrics/releases/download/${CMETRICS_RELEASE}/cmetrics_${CMETRICS_VERSION}_${PACKAGEARCH}-headers.deb external/
+ADD https://github.com/fluent/cmetrics/releases/download/${CMETRICS_RELEASE}/cmetrics_${CMETRICS_VERSION}_${PACKAGEARCH}.deb external/
 RUN dpkg -i external/*.deb
 
 RUN go build -trimpath -buildmode c-shared -o ./bin/go-test-input-plugin.so ./testdata/input/input.go
