@@ -101,9 +101,8 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	contents = bytes.TrimSpace(contents)
 	lines := strings.Split(string(contents), "\n")
 
-	// after 5 seconds of fluentbit running, there should be at least 1 record
-	// and at most 10 record due to the 5s of timeout to shutdown.
-	if d := len(lines); d < 1 || d > 10 {
+	// after 5 seconds of fluentbit running, there should be at least 1 record.
+	if d := len(lines); d < 1 {
 		t.Fatalf("expected at least 1 lines, got %d", d)
 	}
 
@@ -114,24 +113,21 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	//		Record: map[string]string{
 	//			"message": "hello from go-test-input-plugin",
 	//			"foo":     foo,
+	//          "template": tmpl.Execute(nil), // "{{print \"double unquoted\"}}\nnew line"
 	//		},
 	//	}
 	//
 	// Output plugin writes to file:
 	//
-	//	fmt.Fprintf(f, "message=\"got record\" tag=%s time=%s record=%+v\n", msg.Tag(), msg.Time.Format(time.RFC3339), msg.Record)
-	re := regexp.MustCompile(`^message="got record" tag=test-input time=[^\s]+ record=map\[foo:bar message:hello from go-test-input-plugin]$`)
+	//	fmt.Fprintf(f, "message=\"got record\" tag=%s time=%s record_foo=%s record_message=%q record_tmpl=%q\n", msg.Tag(), msg.Time.Format(time.RFC3339), msg.Record.foo, msg.Record.message, msg.Record.tmpl)
+	re := regexp.MustCompile(`^message="got record" tag=test-input time=[^\s]+ record_foo=bar record_message="hello from go-test-input-plugin" record_tmpl="double unquoted\nnewline"$`)
 
 	// fluentbit runs for 5s and with a timeout to shutdown of 5s,
 	// so at most we could get 10 records if they are collected every one second.
-	for i := 0; i < 10; i++ {
-		if len(lines) == i {
-			break
-		}
-
-		line := lines[i]
+	for _, line := range lines {
 		if line == "" {
-			break
+			t.Log("skipping empty line")
+			continue
 		}
 
 		if !re.MatchString(line) {

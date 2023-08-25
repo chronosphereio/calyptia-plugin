@@ -38,7 +38,27 @@ func (plug outputPlugin) Flush(ctx context.Context, ch <-chan plugin.Message) er
 		plug.flushCounter.Add(1)
 		plug.log.Info("[go-test-output-plugin] operation proceeded")
 
-		_, err := fmt.Fprintf(f, "message=\"got record\" tag=%s time=%s record=%+v\n", msg.Tag(), msg.Time.Format(time.RFC3339), msg.Record)
+		m, ok := msg.Record.(map[string]any)
+		if !ok {
+			return fmt.Errorf("unexpected record type: %T", msg.Record)
+		}
+
+		foo, ok := m["foo"].(string)
+		if !ok {
+			return fmt.Errorf("unexpected record type: %T", m["foo"])
+		}
+
+		message := m["message"].(string)
+		if !ok {
+			return fmt.Errorf("unexpected record type: %T", m["message"])
+		}
+
+		tmpl := m["template"].(string)
+		if !ok {
+			return fmt.Errorf("unexpected record type: %T", m["template"])
+		}
+
+		_, err := fmt.Fprintf(f, "message=\"got record\" tag=%s time=%s record_foo=%s record_message=%q record_tmpl=%q\n", msg.Tag(), msg.Time.Format(time.RFC3339), foo, message, tmpl)
 		if err != nil {
 			plug.log.Error("[go-test-output-plugin] operation failed. reason %w", err)
 			return fmt.Errorf("could not write to output.txt: %w", err)

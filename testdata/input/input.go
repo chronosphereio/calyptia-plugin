@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
+	"text/template"
 	"time"
 
 	"github.com/calyptia/plugin"
@@ -15,11 +17,18 @@ func init() {
 
 type inputPlugin struct {
 	foo            string
+	tmpl           *template.Template
 	collectCounter metric.Counter
 	log            plugin.Logger
 }
 
 func (plug *inputPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) error {
+	var err error
+	plug.tmpl, err = template.New("test").Parse(fbit.Conf.String("tmpl"))
+	if err != nil {
+		return err
+	}
+
 	plug.foo = fbit.Conf.String("foo")
 	plug.collectCounter = fbit.Metrics.NewCounter("collect_total", "Total number of collects", "go-test-input-plugin")
 	plug.log = fbit.Logger
@@ -40,6 +49,13 @@ func (plug inputPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) e
 
 			return nil
 		case <-tick.C:
+
+			var buff strings.Builder
+			err := plug.tmpl.Execute(&buff, nil)
+			if err != nil {
+				return err
+			}
+
 			plug.collectCounter.Add(1)
 			plug.log.Info("[go-test-input-plugin] operation succeeded")
 
@@ -48,6 +64,7 @@ func (plug inputPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) e
 				Record: map[string]string{
 					"message": "hello from go-test-input-plugin",
 					"foo":     plug.foo,
+					"tmpl":    buff.String(),
 				},
 			}
 		}
