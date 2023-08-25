@@ -109,8 +109,7 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	err = pool.Client.StartContainer(fbit.ID, nil)
 	assert.NoError(t, err)
 
-	// fluentbit runs for at least 15 seconds.
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 10)
 
 	err = pool.Client.StopContainer(fbit.ID, 5)
 	assert.NoError(t, err)

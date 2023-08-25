@@ -43,6 +43,12 @@ jobs:
           username: ${{ secrets.CI_USERNAME }}
           password: ${{ secrets.CI_PAT }}
 
+      - name: Cache Golang Docker Image
+        run: docker pull golang:latest
+
+      - name: Cache ghcr.io/calyptia/internal/core-fluent-bit Docker Image
+        run: docker pull ghcr.io/calyptia/internal/core-fluent-bit:main
+
       - name: Unit tests
         run: |
           go test -v -covermode=atomic -coverprofile=coverage.out ./...
