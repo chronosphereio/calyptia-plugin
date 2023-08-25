@@ -122,6 +122,8 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	//	fmt.Fprintf(f, "message=\"got record\" tag=%s time=%s record_foo=%s record_message=%q record_tmpl=%q\n", msg.Tag(), msg.Time.Format(time.RFC3339), msg.Record.foo, msg.Record.message, msg.Record.tmpl)
 	re := regexp.MustCompile(`^message="got record" tag=test-input time=[^\s]+ record_foo=bar record_message="hello from go-test-input-plugin" record_tmpl="double unquoted\nnewline"$`)
 
+	var didAssert bool
+
 	// fluentbit runs for 5s and with a timeout to shutdown of 5s,
 	// so at most we could get 10 records if they are collected every one second.
 	for _, line := range lines {
@@ -130,9 +132,15 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 			continue
 		}
 
+		didAssert = true
+
 		if !re.MatchString(line) {
 			t.Fatalf("line %q does not match regexp %q", line, re)
 		}
+	}
+
+	if !didAssert {
+		t.Fatal("no assertions made")
 	}
 }
 
