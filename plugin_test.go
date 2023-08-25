@@ -35,11 +35,11 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	f, err := os.Create(filepath.Join(pwd, "testdata", "output.txt"))
 	assert.NoError(t, err)
 
-	err = f.Truncate(0)
-	assert.NoError(t, err)
-
 	t.Cleanup(func() { _ = f.Close() })
 	t.Cleanup(func() { _ = f.Truncate(0) })
+
+	err = f.Truncate(0)
+	assert.NoError(t, err)
 
 	buildOpts := dc.BuildImageOptions{
 		Name:         "fluent-bit-go.localhost",
