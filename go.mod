@@ -3,6 +3,7 @@ module github.com/calyptia/plugin
 go 1.21
 
 require (
+	github.com/alecthomas/assert/v2 v2.3.0
 	github.com/calyptia/cmetrics-go v0.1.7
 	github.com/ory/dockertest/v3 v3.10.0
 	github.com/ugorji/go/codec v1.2.11
@@ -12,6 +13,7 @@ require (
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
+	github.com/alecthomas/repr v0.2.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/containerd/continuity v0.4.2 // indirect
 	github.com/docker/cli v24.0.5+incompatible // indirect
@@ -20,6 +22,7 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
+	github.com/hexops/gotextdiff v1.0.3 // indirect
 	github.com/imdario/mergo v0.3.16 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/moby/term v0.5.0 // indirect

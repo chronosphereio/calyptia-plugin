@@ -2,34 +2,41 @@ package plugin
 
 import (
 	"bytes"
+	"encoding/json"
+	"flag"
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/alecthomas/assert/v2"
 	"github.com/ory/dockertest/v3"
 	dc "github.com/ory/dockertest/v3/docker"
 )
 
 func TestPlugin(t *testing.T) {
+	flag.Parse()
+
 	pool, err := dockertest.NewPool("")
-	wantNoErr(t, err)
+	assert.NoError(t, err)
 	testPlugin(t, pool)
 }
 
 func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	auths, err := dc.NewAuthConfigurationsFromDockerCfg()
-	wantNoErr(t, err)
+	assert.NoError(t, err)
 
 	pwd, err := os.Getwd()
-	wantNoErr(t, err)
+	assert.NoError(t, err)
 
 	//nolint:gosec //required filesystem access to read fixture data.
-	f, err := os.Create(filepath.Join(pwd, "testdata/output.txt"))
-	wantNoErr(t, err)
+	f, err := os.Create(filepath.Join(pwd, "testdata", "output.txt"))
+	assert.NoError(t, err)
+
+	err = f.Truncate(0)
+	assert.NoError(t, err)
 
 	t.Cleanup(func() { _ = f.Close() })
 	t.Cleanup(func() { _ = f.Truncate(0) })
@@ -46,11 +53,12 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	}
 
 	if testing.Verbose() {
+		buildOpts.OutputStream = os.Stdout
 		buildOpts.ErrorStream = os.Stderr
 	}
 
 	err = pool.Client.BuildImage(buildOpts)
-	wantNoErr(t, err)
+	assert.NoError(t, err)
 
 	fbit, err := pool.Client.CreateContainer(dc.CreateContainerOptions{
 		Config: &dc.Config{
@@ -60,6 +68,16 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 			AutoRemove: true,
 			Mounts: []dc.HostMount{
 				{
+					Source: filepath.Join(pwd, "testdata", "fluent-bit.conf"),
+					Target: "/fluent-bit/etc/fluent-bit.conf",
+					Type:   "bind",
+				},
+				{
+					Source: filepath.Join(pwd, "testdata", "plugins.conf"),
+					Target: "/fluent-bit/etc/plugins.conf",
+					Type:   "bind",
+				},
+				{
 					Source: f.Name(),
 					Target: "/fluent-bit/etc/output.txt",
 					Type:   "bind",
@@ -67,7 +85,7 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 			},
 		},
 	})
-	wantNoErr(t, err)
+	assert.NoError(t, err)
 
 	t.Cleanup(func() {
 		_ = pool.Client.RemoveContainer(dc.RemoveContainerOptions{
@@ -78,76 +96,52 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	go func() {
 		if testing.Verbose() {
 			_ = pool.Client.Logs(dc.LogsOptions{
-				Container:   fbit.ID,
-				ErrorStream: os.Stderr,
-				Stderr:      true,
-				Follow:      true,
+				Container:    fbit.ID,
+				OutputStream: os.Stdout,
+				ErrorStream:  os.Stderr,
+				Stdout:       true,
+				Stderr:       true,
+				Follow:       true,
 			})
 		}
 	}()
 
 	err = pool.Client.StartContainer(fbit.ID, nil)
-	wantNoErr(t, err)
+	assert.NoError(t, err)
 
-	// fluentbit runs for at least 5 seconds.
+	// fluentbit runs for at least 15 seconds.
 	time.Sleep(time.Second * 5)
 
 	err = pool.Client.StopContainer(fbit.ID, 5)
-	wantNoErr(t, err)
+	assert.NoError(t, err)
 
 	contents, err := io.ReadAll(f)
-	wantNoErr(t, err)
+	assert.NoError(t, err)
 
 	contents = bytes.TrimSpace(contents)
 	lines := strings.Split(string(contents), "\n")
 
 	// after 5 seconds of fluentbit running, there should be at least 1 record.
-	if d := len(lines); d < 1 {
-		t.Fatalf("expected at least 1 lines, got %d", d)
+	if d := len(lines); d < 1 || (d == 1 && lines[0] == "") {
+		t.Fatal("expected at least 1 lines")
 	}
 
-	// Input plugin sends:
-	//
-	//	Message{
-	//		Time: time.Now(),
-	//		Record: map[string]string{
-	//			"message": "hello from go-test-input-plugin",
-	//			"foo":     foo,
-	//          "template": tmpl.Execute(nil), // "{{print \"double unquoted\"}}\nnew line"
-	//		},
-	//	}
-	//
-	// Output plugin writes to file:
-	//
-	//	fmt.Fprintf(f, "message=\"got record\" tag=%s time=%s record_foo=%s record_message=%q record_tmpl=%q\n", msg.Tag(), msg.Time.Format(time.RFC3339), msg.Record.foo, msg.Record.message, msg.Record.tmpl)
-	re := regexp.MustCompile(`^message="got record" tag=test-input time=[^\s]+ record_foo=bar record_message="hello from go-test-input-plugin" record_tmpl="double unquoted\nnewline"$`)
-
-	var didAssert bool
-
-	// fluentbit runs for 5s and with a timeout to shutdown of 5s,
-	// so at most we could get 10 records if they are collected every one second.
 	for _, line := range lines {
 		if line == "" {
 			t.Log("skipping empty line")
 			continue
 		}
 
-		didAssert = true
-
-		if !re.MatchString(line) {
-			t.Fatalf("line %q does not match regexp %q", line, re)
+		var got struct {
+			Foo     string `json:"foo"`
+			Message string `json:"message"`
+			Tmpl    string `json:"tmpl"`
 		}
-	}
 
-	if !didAssert {
-		t.Fatal("no assertions made")
-	}
-}
-
-func wantNoErr(t *testing.T, err error) {
-	t.Helper()
-
-	if err != nil {
-		t.Fatal(err)
+		err := json.Unmarshal([]byte(line), &got)
+		assert.NoError(t, err)
+		assert.Equal(t, "bar", got.Foo)
+		assert.Equal(t, "hello from go-test-input-plugin", got.Message)
+		assert.Equal(t, "inside double quotes\nnew line", got.Tmpl)
 	}
 }

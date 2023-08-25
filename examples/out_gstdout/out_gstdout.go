@@ -14,9 +14,10 @@ func FLBPluginRegister(def unsafe.Pointer) int {
 	return output.FLBPluginRegister(def, "gstdout", "Stdout GO!")
 }
 
-//export FLBPluginInit
 // (fluentbit will call this)
 // plugin (context) pointer to fluentbit context (state/ c code)
+//
+//export FLBPluginInit
 func FLBPluginInit(plugin unsafe.Pointer) int {
 	// Example to retrieve an optional configuration parameter
 	param := output.FLBPluginConfigKey(plugin, "param")

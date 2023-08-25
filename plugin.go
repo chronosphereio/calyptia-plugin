@@ -36,9 +36,9 @@ func init() {
 }
 
 type Fluentbit struct {
-  Conf ConfigLoader
-  Metrics Metrics
-  Logger Logger
+	Conf    ConfigLoader
+	Metrics Metrics
+	Logger  Logger
 }
 
 // InputPlugin interface to represent an input fluent-bit plugin.

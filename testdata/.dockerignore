@@ -1,0 +1,3 @@
+fluent-bit.conf
+plugins.conf
+output.txt

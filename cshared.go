@@ -14,15 +14,16 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"strconv"
 	"time"
 	"unsafe"
 
-	"github.com/calyptia/plugin/input"
-	metricbuilder "github.com/calyptia/plugin/metric/cmetric"
-	"github.com/calyptia/plugin/output"
 	"github.com/ugorji/go/codec"
 
 	cmetrics "github.com/calyptia/cmetrics-go"
+	"github.com/calyptia/plugin/input"
+	metricbuilder "github.com/calyptia/plugin/metric/cmetric"
+	"github.com/calyptia/plugin/output"
 )
 
 var unregister func()
@@ -31,6 +32,7 @@ var logger Logger
 
 // FLBPluginRegister registers a plugin in the context of the fluent-bit runtime, a name and description
 // can be provided.
+//
 //export FLBPluginRegister
 func FLBPluginRegister(def unsafe.Pointer) int {
 	defer registerWG.Done()
@@ -59,6 +61,7 @@ func FLBPluginRegister(def unsafe.Pointer) int {
 // FLBPluginInit this method gets invoked once by the fluent-bit runtime at initialisation phase.
 // here all the plugin context should be initialised and any data or flag required for
 // plugins to execute the collect or flush callback.
+//
 //export FLBPluginInit
 func FLBPluginInit(ptr unsafe.Pointer) int {
 	defer initWG.Done()
@@ -82,9 +85,9 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 		}
 		logger = &flbInputLogger{ptr: ptr}
 		fbit := &Fluentbit{
-			Conf: conf,
+			Conf:    conf,
 			Metrics: makeMetrics(cmt),
-			Logger: logger,
+			Logger:  logger,
 		}
 
 		err = theInput.Init(ctx, fbit)
@@ -96,9 +99,9 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 		}
 		logger = &flbOutputLogger{ptr: ptr}
 		fbit := &Fluentbit{
-			Conf: conf,
+			Conf:    conf,
 			Metrics: makeMetrics(cmt),
-			Logger: logger,
+			Logger:  logger,
 		}
 		err = theOutput.Init(ctx, fbit)
 	}
@@ -114,6 +117,7 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 // initialised, the plugin implementation is responsible for handling the incoming data and the context
 // that gets past, for long-living collectors the plugin itself should keep a running thread and fluent-bit
 // will not execute further callbacks.
+//
 //export FLBPluginInputCallback
 func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 	initWG.Wait()
@@ -171,6 +175,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 }
 
 // FLBPluginInputCleanupCallback releases the memory used during the input callback
+//
 //export FLBPluginInputCleanupCallback
 func FLBPluginInputCleanupCallback(data unsafe.Pointer) int {
 	C.free(data)
@@ -179,6 +184,7 @@ func FLBPluginInputCleanupCallback(data unsafe.Pointer) int {
 
 // FLBPluginFlush callback gets invoked by the fluent-bit runtime once there is data for the corresponding
 // plugin in the pipeline, a data pointer, length and a tag are passed to the plugin interface implementation.
+//
 //export FLBPluginFlush
 //nolint:funlen,gocognit,gocyclo //ignore length requirement for this function, TODO: refactor into smaller functions.
 func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
@@ -300,6 +306,7 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 }
 
 // FLBPluginExit method is invoked once the plugin instance is exited from the fluent-bit context.
+//
 //export FLBPluginExit
 func FLBPluginExit() int {
 	log.Printf("calling FLBPluginExit(): name=%q\n", theName)
@@ -324,7 +331,11 @@ type flbInputConfigLoader struct {
 }
 
 func (f *flbInputConfigLoader) String(key string) string {
-	return input.FLBPluginConfigKey(f.ptr, key)
+	s := input.FLBPluginConfigKey(f.ptr, key)
+	if tmp, err := strconv.Unquote(s); err == nil {
+		return tmp
+	}
+	return s
 }
 
 type flbOutputConfigLoader struct {
@@ -332,7 +343,11 @@ type flbOutputConfigLoader struct {
 }
 
 func (f *flbOutputConfigLoader) String(key string) string {
-	return output.FLBPluginConfigKey(f.ptr, key)
+	s := output.FLBPluginConfigKey(f.ptr, key)
+	if tmp, err := strconv.Unquote(s); err == nil {
+		return tmp
+	}
+	return s
 }
 
 type flbInputLogger struct {
