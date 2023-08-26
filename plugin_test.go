@@ -33,13 +33,7 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	assert.NoError(t, err)
 
 	//nolint:gosec //required filesystem access to read fixture data.
-	f, err := os.Create(filepath.Join(pwd, "testdata", "output.txt"))
-	assert.NoError(t, err)
-
-	t.Cleanup(func() { _ = f.Close() })
-	t.Cleanup(func() { _ = f.Truncate(0) })
-
-	err = f.Truncate(0)
+	f, err := os.Create(filepath.Join(t.TempDir(), "output.txt"))
 	assert.NoError(t, err)
 
 	buildOpts := dc.BuildImageOptions{
