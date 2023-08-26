@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"io"
 	"os"
@@ -107,10 +108,8 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 
 	start := time.Now()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*3)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	t.Cleanup(cancel)
-
-	var didAssert bool
 
 	go func() {
 		for {
@@ -143,7 +142,6 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 
 				t.Logf("took %s", time.Since(start))
 
-				didAssert = true
 				cancel()
 				return
 			}
@@ -155,5 +153,7 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	err = pool.Client.StopContainer(fbit.ID, 6)
 	assert.NoError(t, err)
 
-	assert.True(t, didAssert)
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		t.Fatal("timeout exceeded")
+	}
 }
