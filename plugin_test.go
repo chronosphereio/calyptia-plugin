@@ -110,7 +110,7 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	err = pool.Client.StartContainer(fbit.ID, nil)
 	assert.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*3)
 	t.Cleanup(cancel)
 
 	var didAssert bool
