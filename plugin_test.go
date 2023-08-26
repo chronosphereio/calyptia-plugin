@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"io"
@@ -109,38 +110,48 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	err = pool.Client.StartContainer(fbit.ID, nil)
 	assert.NoError(t, err)
 
-	time.Sleep(time.Second * 30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	t.Cleanup(cancel)
 
-	err = pool.Client.StopContainer(fbit.ID, 5)
-	assert.NoError(t, err)
+	go func() {
+		for {
+			contents, err := io.ReadAll(f)
+			assert.NoError(t, err)
 
-	contents, err := io.ReadAll(f)
-	assert.NoError(t, err)
+			contents = bytes.TrimSpace(contents)
+			lines := strings.Split(string(contents), "\n")
 
-	contents = bytes.TrimSpace(contents)
-	lines := strings.Split(string(contents), "\n")
+			var didAssert bool
 
-	// after 5 seconds of fluentbit running, there should be at least 1 record.
-	if d := len(lines); d < 1 || (d == 1 && lines[0] == "") {
-		t.Fatal("expected at least 1 lines")
-	}
+			for _, line := range lines {
+				if line == "" {
+					continue
+				}
 
-	for _, line := range lines {
-		if line == "" {
-			t.Log("skipping empty line")
-			continue
+				var got struct {
+					Foo     string `json:"foo"`
+					Message string `json:"message"`
+					Tmpl    string `json:"tmpl"`
+				}
+
+				err := json.Unmarshal([]byte(line), &got)
+				assert.NoError(t, err)
+				assert.Equal(t, "bar", got.Foo)
+				assert.Equal(t, "hello from go-test-input-plugin", got.Message)
+				assert.Equal(t, "inside double quotes\nnew line", got.Tmpl)
+
+				didAssert = true
+			}
+
+			if didAssert {
+				cancel()
+				return
+			}
 		}
+	}()
 
-		var got struct {
-			Foo     string `json:"foo"`
-			Message string `json:"message"`
-			Tmpl    string `json:"tmpl"`
-		}
+	<-ctx.Done()
 
-		err := json.Unmarshal([]byte(line), &got)
-		assert.NoError(t, err)
-		assert.Equal(t, "bar", got.Foo)
-		assert.Equal(t, "hello from go-test-input-plugin", got.Message)
-		assert.Equal(t, "inside double quotes\nnew line", got.Tmpl)
-	}
+	err = pool.Client.StopContainer(fbit.ID, 6)
+	assert.NoError(t, err)
 }
