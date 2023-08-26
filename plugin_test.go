@@ -115,6 +115,10 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 
 	go func() {
 		for {
+			if ctx.Err() != nil {
+				return
+			}
+
 			contents, err := io.ReadAll(f)
 			assert.NoError(t, err)
 
