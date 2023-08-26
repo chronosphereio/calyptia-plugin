@@ -113,6 +113,8 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	t.Cleanup(cancel)
 
+	var didAssert bool
+
 	go func() {
 		for {
 			if ctx.Err() != nil {
@@ -124,8 +126,6 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 
 			contents = bytes.TrimSpace(contents)
 			lines := strings.Split(string(contents), "\n")
-
-			var didAssert bool
 
 			for _, line := range lines {
 				if line == "" {
@@ -145,9 +145,6 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 				assert.Equal(t, "inside double quotes\nnew line", got.Tmpl)
 
 				didAssert = true
-			}
-
-			if didAssert {
 				cancel()
 				return
 			}
@@ -158,4 +155,6 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 
 	err = pool.Client.StopContainer(fbit.ID, 6)
 	assert.NoError(t, err)
+
+	assert.True(t, didAssert)
 }
