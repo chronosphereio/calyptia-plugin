@@ -108,7 +108,7 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 
 	start := time.Now()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	t.Cleanup(cancel)
 
 	go func() {
