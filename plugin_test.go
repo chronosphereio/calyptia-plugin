@@ -58,6 +58,7 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	fbit, err := pool.Client.CreateContainer(dc.CreateContainerOptions{
 		Config: &dc.Config{
 			Image: "fluent-bit-go.localhost",
+			User:  "1000:1000",
 		},
 		HostConfig: &dc.HostConfig{
 			AutoRemove: true,
@@ -104,6 +105,8 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	err = pool.Client.StartContainer(fbit.ID, nil)
 	assert.NoError(t, err)
 
+	start := time.Now()
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*3)
 	t.Cleanup(cancel)
 
@@ -137,6 +140,8 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 				assert.Equal(t, "bar", got.Foo)
 				assert.Equal(t, "hello from go-test-input-plugin", got.Message)
 				assert.Equal(t, "inside double quotes\nnew line", got.Tmpl)
+
+				t.Logf("took %s", time.Since(start))
 
 				didAssert = true
 				cancel()
