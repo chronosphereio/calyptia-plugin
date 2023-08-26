@@ -35,8 +35,6 @@ RUN go build -trimpath -buildmode c-shared -o ./bin/go-test-output-plugin.so ./t
 
 FROM ghcr.io/calyptia/internal/core-fluent-bit:main
 
-USER 9876
-
 COPY --from=builder /fluent-bit-go/bin/go-test-input-plugin.so /fluent-bit/etc/
 COPY --from=builder /fluent-bit-go/bin/go-test-output-plugin.so /fluent-bit/etc/
 
