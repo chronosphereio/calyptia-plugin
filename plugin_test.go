@@ -37,6 +37,17 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	f, err := os.Create(filepath.Join(t.TempDir(), "output.txt"))
 	assert.NoError(t, err)
 
+	defer func() {
+		err := os.RemoveAll(f.Name())
+		if err != nil {
+			return
+		}
+	}()
+
+	// Set permissions on the file to be world-writable
+	err = os.Chmod(f.Name(), 0777)
+	assert.NoError(t, err)
+
 	buildOpts := dc.BuildImageOptions{
 		Name:         "fluent-bit-go.localhost",
 		ContextDir:   ".",
@@ -59,7 +70,6 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	fbit, err := pool.Client.CreateContainer(dc.CreateContainerOptions{
 		Config: &dc.Config{
 			Image: "fluent-bit-go.localhost",
-			User:  "1000:1000",
 		},
 		HostConfig: &dc.HostConfig{
 			AutoRemove: true,

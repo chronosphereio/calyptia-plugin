@@ -22,9 +22,7 @@ RUN go mod verify
 
 COPY . .
 
-RUN rm -rf ./testdata/fluent-bit.conf
-RUN rm -rf ./testdata/plugins.conf
-RUN rm -rf ./testdata/output.txt
+RUN rm -rf ./testdata/fluent-bit.conf ./testdata/plugins.conf ./testdata/output.txt
 
 ADD https://github.com/fluent/cmetrics/releases/download/${CMETRICS_RELEASE}/cmetrics_${CMETRICS_VERSION}_${PACKAGEARCH}-headers.deb external/
 ADD https://github.com/fluent/cmetrics/releases/download/${CMETRICS_RELEASE}/cmetrics_${CMETRICS_VERSION}_${PACKAGEARCH}.deb external/
