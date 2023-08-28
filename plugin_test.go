@@ -139,16 +139,18 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 				}
 
 				var got struct {
-					Foo     string `json:"foo"`
-					Message string `json:"message"`
-					Tmpl    string `json:"tmpl"`
+					Foo            string   `json:"foo"`
+					Message        string   `json:"message"`
+					TmplOut        string   `json:"tmpl_out"`
+					MultilineSplit []string `json:"multiline_split"`
 				}
 
 				err := json.Unmarshal([]byte(line), &got)
 				assert.NoError(t, err)
 				assert.Equal(t, "bar", got.Foo)
 				assert.Equal(t, "hello from go-test-input-plugin", got.Message)
-				assert.Equal(t, "inside double quotes\nnew line", got.Tmpl)
+				assert.Equal(t, "inside double quotes\nnew line", got.TmplOut)
+				assert.Equal(t, []string{"foo", "bar"}, got.MultilineSplit)
 
 				t.Logf("took %s", time.Since(start))
 

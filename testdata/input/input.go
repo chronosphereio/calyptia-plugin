@@ -18,6 +18,7 @@ func init() {
 type inputPlugin struct {
 	foo            string
 	tmpl           *template.Template
+	multilineSplit []string
 	collectCounter metric.Counter
 	log            plugin.Logger
 }
@@ -30,6 +31,7 @@ func (plug *inputPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) error
 	}
 
 	plug.foo = fbit.Conf.String("foo")
+	plug.multilineSplit = strings.Split(fbit.Conf.String("multiline"), "\n")
 	plug.collectCounter = fbit.Metrics.NewCounter("collect_total", "Total number of collects", "go-test-input-plugin")
 	plug.log = fbit.Logger
 	return nil
@@ -61,10 +63,11 @@ func (plug inputPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) e
 
 			ch <- plugin.Message{
 				Time: time.Now(),
-				Record: map[string]string{
-					"message": "hello from go-test-input-plugin",
-					"foo":     plug.foo,
-					"tmpl":    buff.String(),
+				Record: map[string]any{
+					"message":         "hello from go-test-input-plugin",
+					"foo":             plug.foo,
+					"tmpl_out":        buff.String(),
+					"multiline_split": plug.multilineSplit,
 				},
 			}
 		}

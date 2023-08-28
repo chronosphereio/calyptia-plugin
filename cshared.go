@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -331,10 +332,21 @@ type flbInputConfigLoader struct {
 }
 
 func (f *flbInputConfigLoader) String(key string) string {
-	s := input.FLBPluginConfigKey(f.ptr, key)
+	return unquote(input.FLBPluginConfigKey(f.ptr, key))
+}
+
+func unquote(s string) string {
 	if tmp, err := strconv.Unquote(s); err == nil {
 		return tmp
 	}
+
+	// unescape literal newlines
+	if strings.Contains(s, `\n`) {
+		if tmp2, err := strconv.Unquote(`"` + s + `"`); err == nil {
+			return tmp2
+		}
+	}
+
 	return s
 }
 
@@ -343,11 +355,7 @@ type flbOutputConfigLoader struct {
 }
 
 func (f *flbOutputConfigLoader) String(key string) string {
-	s := output.FLBPluginConfigKey(f.ptr, key)
-	if tmp, err := strconv.Unquote(s); err == nil {
-		return tmp
-	}
-	return s
+	return unquote(output.FLBPluginConfigKey(f.ptr, key))
 }
 
 type flbInputLogger struct {
