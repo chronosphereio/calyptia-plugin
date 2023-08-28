@@ -2,37 +2,51 @@ package plugin
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"flag"
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/alecthomas/assert/v2"
 	"github.com/ory/dockertest/v3"
 	dc "github.com/ory/dockertest/v3/docker"
 )
 
 func TestPlugin(t *testing.T) {
+	flag.Parse()
+
 	pool, err := dockertest.NewPool("")
-	wantNoErr(t, err)
+	assert.NoError(t, err)
 	testPlugin(t, pool)
 }
 
 func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	auths, err := dc.NewAuthConfigurationsFromDockerCfg()
-	wantNoErr(t, err)
+	assert.NoError(t, err)
 
 	pwd, err := os.Getwd()
-	wantNoErr(t, err)
+	assert.NoError(t, err)
 
 	//nolint:gosec //required filesystem access to read fixture data.
-	f, err := os.Create(filepath.Join(pwd, "testdata/output.txt"))
-	wantNoErr(t, err)
+	f, err := os.Create(filepath.Join(t.TempDir(), "output.txt"))
+	assert.NoError(t, err)
 
-	t.Cleanup(func() { _ = f.Close() })
-	t.Cleanup(func() { _ = f.Truncate(0) })
+	defer func() {
+		err := os.RemoveAll(f.Name())
+		if err != nil {
+			return
+		}
+	}()
+
+	// Set permissions on the file to be world-writable
+	err = os.Chmod(f.Name(), 0777)
+	assert.NoError(t, err)
 
 	buildOpts := dc.BuildImageOptions{
 		Name:         "fluent-bit-go.localhost",
@@ -46,11 +60,12 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	}
 
 	if testing.Verbose() {
+		buildOpts.OutputStream = os.Stdout
 		buildOpts.ErrorStream = os.Stderr
 	}
 
 	err = pool.Client.BuildImage(buildOpts)
-	wantNoErr(t, err)
+	assert.NoError(t, err)
 
 	fbit, err := pool.Client.CreateContainer(dc.CreateContainerOptions{
 		Config: &dc.Config{
@@ -60,6 +75,16 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 			AutoRemove: true,
 			Mounts: []dc.HostMount{
 				{
+					Source: filepath.Join(pwd, "testdata", "fluent-bit.conf"),
+					Target: "/fluent-bit/etc/fluent-bit.conf",
+					Type:   "bind",
+				},
+				{
+					Source: filepath.Join(pwd, "testdata", "plugins.conf"),
+					Target: "/fluent-bit/etc/plugins.conf",
+					Type:   "bind",
+				},
+				{
 					Source: f.Name(),
 					Target: "/fluent-bit/etc/output.txt",
 					Type:   "bind",
@@ -67,7 +92,7 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 			},
 		},
 	})
-	wantNoErr(t, err)
+	assert.NoError(t, err)
 
 	t.Cleanup(func() {
 		_ = pool.Client.RemoveContainer(dc.RemoveContainerOptions{
@@ -78,72 +103,67 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	go func() {
 		if testing.Verbose() {
 			_ = pool.Client.Logs(dc.LogsOptions{
-				Container:   fbit.ID,
-				ErrorStream: os.Stderr,
-				Stderr:      true,
-				Follow:      true,
+				Container:    fbit.ID,
+				OutputStream: os.Stdout,
+				ErrorStream:  os.Stderr,
+				Stdout:       true,
+				Stderr:       true,
+				Follow:       true,
 			})
 		}
 	}()
 
 	err = pool.Client.StartContainer(fbit.ID, nil)
-	wantNoErr(t, err)
+	assert.NoError(t, err)
 
-	// fluentbit runs for at least 5 seconds.
-	time.Sleep(time.Second * 5)
+	start := time.Now()
 
-	err = pool.Client.StopContainer(fbit.ID, 5)
-	wantNoErr(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	t.Cleanup(cancel)
 
-	contents, err := io.ReadAll(f)
-	wantNoErr(t, err)
+	go func() {
+		for {
+			if ctx.Err() != nil {
+				return
+			}
 
-	contents = bytes.TrimSpace(contents)
-	lines := strings.Split(string(contents), "\n")
+			contents, err := io.ReadAll(f)
+			assert.NoError(t, err)
 
-	// after 5 seconds of fluentbit running, there should be at least 1 record
-	// and at most 10 record due to the 5s of timeout to shutdown.
-	if d := len(lines); d < 1 || d > 10 {
-		t.Fatalf("expected at least 1 lines, got %d", d)
-	}
+			contents = bytes.TrimSpace(contents)
+			lines := strings.Split(string(contents), "\n")
 
-	// Input plugin sends:
-	//
-	//	Message{
-	//		Time: time.Now(),
-	//		Record: map[string]string{
-	//			"message": "hello from go-test-input-plugin",
-	//			"foo":     foo,
-	//		},
-	//	}
-	//
-	// Output plugin writes to file:
-	//
-	//	fmt.Fprintf(f, "message=\"got record\" tag=%s time=%s record=%+v\n", msg.Tag(), msg.Time.Format(time.RFC3339), msg.Record)
-	re := regexp.MustCompile(`^message="got record" tag=test-input time=[^\s]+ record=map\[foo:bar message:hello from go-test-input-plugin]$`)
+			for _, line := range lines {
+				if line == "" {
+					continue
+				}
 
-	// fluentbit runs for 5s and with a timeout to shutdown of 5s,
-	// so at most we could get 10 records if they are collected every one second.
-	for i := 0; i < 10; i++ {
-		if len(lines) == i {
-			break
+				var got struct {
+					Foo     string `json:"foo"`
+					Message string `json:"message"`
+					Tmpl    string `json:"tmpl"`
+				}
+
+				err := json.Unmarshal([]byte(line), &got)
+				assert.NoError(t, err)
+				assert.Equal(t, "bar", got.Foo)
+				assert.Equal(t, "hello from go-test-input-plugin", got.Message)
+				assert.Equal(t, "inside double quotes\nnew line", got.Tmpl)
+
+				t.Logf("took %s", time.Since(start))
+
+				cancel()
+				return
+			}
 		}
+	}()
 
-		line := lines[i]
-		if line == "" {
-			break
-		}
+	<-ctx.Done()
 
-		if !re.MatchString(line) {
-			t.Fatalf("line %q does not match regexp %q", line, re)
-		}
-	}
-}
+	err = pool.Client.StopContainer(fbit.ID, 6)
+	assert.NoError(t, err)
 
-func wantNoErr(t *testing.T, err error) {
-	t.Helper()
-
-	if err != nil {
-		t.Fatal(err)
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		t.Fatal("timeout exceeded")
 	}
 }
