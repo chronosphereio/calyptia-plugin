@@ -165,12 +165,15 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		// fluent-bit to kick in before any remaining data has not been GC'ed
 		// causing a sigsegv.
 		defer runtime.GC()
+	default:
+		break
 	}
 
 	return input.FLB_OK
 }
 
 // FLBPluginInputCleanupCallback releases the memory used during the input callback
+//
 //export FLBPluginInputCleanupCallback
 func FLBPluginInputCleanupCallback(data unsafe.Pointer) int {
 	C.free(data)
