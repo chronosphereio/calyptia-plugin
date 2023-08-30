@@ -7,8 +7,7 @@ import (
 	"unsafe"
 )
 
-type testPluginInputCallback struct {
-}
+type testPluginInputCallback struct{}
 
 func (t testPluginInputCallback) Init(ctx context.Context, fbit *Fluentbit) error {
 	return nil

@@ -1,0 +1,19 @@
+HTTP_Server: "On"
+HTTP_Listen: 0.0.0.0
+HTTP_PORT: 2020
+Log_Level: debug
+plugins_file: /opt/calyptia-fluent-bit/etc/enterprise_plugins.conf
+Parsers_File: /config/parsers.conf
+customs:
+  - name: calyptia
+    calyptia_tls: "off"
+    api_key: token
+    pipeline_id: 774e7aed-cce1-4460-a160-1d24be8c37dd
+    add_label: pipeline_id 774e7aed-cce1-4460-a160-1d24be8c37dd
+    calyptia_host: cloud-api.calyptia.com
+pipeline:
+  inputs:
+    - name: fluentbit_metrics
+      tag: _calyptia_cloud
+      scrape_on_start: true
+      scrape_interval: 30

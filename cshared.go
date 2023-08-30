@@ -27,9 +27,11 @@ import (
 	"github.com/calyptia/plugin/output"
 )
 
-var unregister func()
-var cmt *cmetrics.Context
-var logger Logger
+var (
+	unregister func()
+	cmt        *cmetrics.Context
+	logger     Logger
+)
 
 // FLBPluginRegister registers a plugin in the context of the fluent-bit runtime, a name and description
 // can be provided.

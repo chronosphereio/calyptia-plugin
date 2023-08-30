@@ -1,8 +1,6 @@
 module github.com/fluent/fluent-bit-go/examples/gstdout
 
-go 1.21
-
-toolchain go1.21.0
+go 1.21.0
 
 require github.com/fluent/fluent-bit-go v0.0.0-20200420155746-e125cab17963
 

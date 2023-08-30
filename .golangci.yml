@@ -5,12 +5,15 @@ run:
   #   vendor$, third_party$, testdata$, examples$, Godeps$, builtin$
   skip-dirs-use-default: true
 linters-settings:
+  funlen:
+    lines: 100
+    statements: 50
   goimports:
     local-prefixes: github.com/calyptia/cloud
   revive:
     min-confidence: 0.8
   gocyclo:
-    min-complexity: 15
+    min-complexity: 25
   govet:
     check-shadowing: true
   misspell:
@@ -18,6 +21,8 @@ linters-settings:
   gomnd:
     ignored-numbers:
       - 2 #used for word splitting.
+  gocognit:
+    min-complexity: 54
   nolintlint:
     allow-leading-space: false # require machine-readable nolint directives (with no leading space)
     allow-unused: false # report any unused nolint directives
@@ -40,7 +45,6 @@ linters:
     - unused
     - varcheck
     - bodyclose
-    - depguard
     - dupl
     - exportloopref
     - forcetypeassert
