@@ -170,6 +170,8 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		// fluent-bit to kick in before any remaining data has not been GC'ed
 		// causing a sigsegv.
 		defer runtime.GC()
+	default:
+		break
 	}
 
 	return input.FLB_OK
