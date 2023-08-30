@@ -1,4 +1,4 @@
-FROM golang:latest AS builder
+FROM golang:1.21 AS builder
 
 ARG TARGETPLATFORM=linux/amd64
 ARG BUILDPLATFORM=linux/amd64

@@ -46,8 +46,10 @@ const (
 )
 
 // Local type to define a plugin definition
-type FLBPluginProxyDef C.struct_flb_plugin_proxy_def
-type FLBInPlugin C.struct_flbgo_input_plugin
+type (
+	FLBPluginProxyDef C.struct_flb_plugin_proxy_def
+	FLBInPlugin       C.struct_flbgo_input_plugin
+)
 
 // When the FLBPluginInit is triggered by Fluent Bit, a plugin context
 // is passed and the next step is to invoke this FLBPluginRegister() function
