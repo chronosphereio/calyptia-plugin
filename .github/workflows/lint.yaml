@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     name: PR - Hadolint
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         # Ignores do not work: https://github.com/reviewdog/action-hadolint/issues/35 is resolved
       - uses: reviewdog/action-hadolint@v1
 
@@ -17,14 +17,14 @@ jobs:
     runs-on: ubuntu-latest
     name: PR - Shellcheck
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ludeeus/action-shellcheck@master
 
   actionlint-pr:
     runs-on: ubuntu-latest
     name: PR - Actionlint
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: |
           echo "::add-matcher::.github/actionlint-matcher.json"
           bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
@@ -38,7 +38,7 @@ jobs:
     name: PR - Reusable workflow linting
     steps:
       # We probably should target this on only workflow changes but the complexity of doing that is a lot more than just letting the grep run.
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       # Recursive grep or any workflow using a local reusable workflow but not ending in @main
       - run: |
           if [[ $(grep -R -E 'uses:[ ]*calyptia/enterprise/.github/workflows/.*@[^main].*$' .github/workflows/*.y*ml| wc -l) -gt 0 ]]; then
@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     name: PR - GO lint
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: golangci-lint
         uses: reviewdog/action-golangci-lint@v2
