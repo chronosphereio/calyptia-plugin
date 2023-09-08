@@ -159,7 +159,6 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 				case <-t.C:
 					buflock.Unlock()
 					buflock.Lock()
-				default:
 				}
 				buflock.Unlock()
 			}
