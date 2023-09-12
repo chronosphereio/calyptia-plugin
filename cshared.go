@@ -36,6 +36,11 @@ var (
 	buflock    sync.Mutex
 )
 
+const (
+	collectInterval = time.Nanosecond * 1000
+
+)
+
 // FLBPluginRegister registers a plugin in the context of the fluent-bit runtime, a name and description
 // can be provided.
 //
@@ -146,7 +151,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		// behavior and also simulate the original behavior for those plugins that
 		// do not hold on to the thread.
 		go func(runCtx context.Context) {
-			t := time.NewTicker(1000 * time.Nanosecond)
+			t := time.NewTicker(collectInterval)
 			defer t.Stop()
 
 			for {
