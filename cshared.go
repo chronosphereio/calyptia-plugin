@@ -138,7 +138,6 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		return input.FLB_RETRY
 	}
 
-	var err error
 	once.Do(func() {
 		runCtx, runCancel = context.WithCancel(context.Background())
 		// we need to configure this part....
@@ -196,10 +195,6 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 			}
 		}(cbuf)
 	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "run: %s\n", err)
-		return input.FLB_ERROR
-	}
 
 	buf := bytes.NewBuffer([]byte{})
 
