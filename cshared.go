@@ -141,11 +141,26 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		// do we need to buffer this part???
 		cbuf := make(chan Message, 16)
 
-		go func() {
-			if err := theInput.Collect(runCtx, cbuf); err != nil {
-				fmt.Fprintf("Error collecting input: %s\n", err)
+		// Most plugins expect Collect to be invoked once and then takes over the
+		// input thread by running in an infinite loop. Here we simulate this
+		// behaviour and also simulate the original behaviour for those plugins that
+		// do not hold on to the thread.
+		go func(runCtx context.Context) {
+			t := time.NewTicker(1000 * time.Nanosecond)
+			defer t.Stop()
+
+			for {
+				select {
+				case <-runCtx.Done():
+					return
+				case <-t.C:
+					if err := theInput.Collect(runCtx, cbuf); err != nil {
+						fmt.Fprintf("Error collecting input: %s\n", err)
+					}
+				}
 			}
-		}()
+		}(runCtx)
+
 		go func(cbuf chan Message) {
 			t := time.NewTicker(1 * time.Second)
 			defer t.Stop()
