@@ -155,7 +155,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 					return
 				case <-t.C:
 					if err := theInput.Collect(runCtx, cbuf); err != nil {
-						fmt.Fprintf(os.Stderr, "Error collecting input: %s\n", err)
+						fmt.Fprintf(os.Stderr, "Error collecting input: %s\n", err.Error())
 					}
 				}
 			}
