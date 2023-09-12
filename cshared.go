@@ -257,7 +257,8 @@ func FLBPluginInputCleanupCallback(data unsafe.Pointer) int {
 // plugin in the pipeline, a data pointer, length and a tag are passed to the plugin interface implementation.
 //
 //export FLBPluginFlush
-//nolint:funlen,gocognit,gocyclo //ignore length requirement for this function, TODO: refactor into smaller functions.
+// TODO: refactor into smaller functions.
+//nolint:funlen //ignore length requirement for this function
 func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 	initWG.Wait()
 
