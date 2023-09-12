@@ -183,6 +183,9 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 				case <-t.C:
 					buflock.Unlock()
 					buflock.Lock()
+				case <-runCtx.Done():
+					buflock.Unlock()
+					return
 				}
 				buflock.Unlock()
 			}
