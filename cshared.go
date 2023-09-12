@@ -161,9 +161,15 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 			}
 		}(runCtx)
 
+		// Limit submits to a single full buffer for each second. This limits
+		// the amount of locking when invoking the fluent-bit API.
 		go func(cbuf chan Message) {
 			t := time.NewTicker(1 * time.Second)
 			defer t.Stop()
+
+			// Use a mutex lock for the buffer to avoid filling the buffer more than
+			// once per period (1s). We also use the mutex lock to avoid infinitely
+			// filling the buffer while it is being flushed to fluent-bit.
 			for {
 				buflock.Lock()
 				select {
@@ -188,8 +194,11 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 	}
 
 	buf := bytes.NewBuffer([]byte{})
-	buflock.Lock()
 
+	// Here we read all the messages produced in the internal buffer submit them
+	// once for each period invocation. We lock the buffer so no new messages
+	// arrive while draining the buffer.
+	buflock.Lock()
 	for loop := len(theChannel) > 0; loop; {
 		select {
 		case msg, ok := <-theChannel:
@@ -206,6 +215,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 			buf.Grow(len(b))
 			buf.Write(b)
 		default:
+			// when there are no more messages explicitly mark the loop be terminated.
 			loop = false
 		case <-runCtx.Done():
 			err := runCtx.Err()
