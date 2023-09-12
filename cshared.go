@@ -37,8 +37,16 @@ var (
 )
 
 const (
+	// collectInterval is equal to the interval originally used in the high 
+	// frequency patch in fluent-bit.
 	collectInterval = time.Nanosecond * 1000
+	// maxBufferedMessages is the number of messages that will be buffered
+	// between each fluent-bit interval (approx 1 second).
 	maxBufferedMessages = 300000
+	// maxConcurrentChannels is the number of channels that will be buffered
+	// for incoming messages to the message buffer. These messages will be
+	// ingested as quickly as possible until the buffer is full.
+	maxConcurrentChannels = 16
 )
 
 // FLBPluginRegister registers a plugin in the context of the fluent-bit runtime, a name and description
@@ -140,10 +148,9 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 
 	once.Do(func() {
 		runCtx, runCancel = context.WithCancel(context.Background())
-		// we need to configure this part....
+
 		theChannel = make(chan Message, maxBufferedMessages)
-		// do we need to buffer this part???
-		cbuf := make(chan Message, 16)
+		cbuf := make(chan Message, maxConcurrentChannels)
 
 		// Most plugins expect Collect to be invoked once and then takes over the
 		// input thread by running in an infinite loop. Here we simulate this
