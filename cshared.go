@@ -65,7 +65,7 @@ func FLBPluginRegister(def unsafe.Pointer) int {
 }
 
 // FLBPluginInit this method gets invoked once by the fluent-bit runtime at initialisation phase.
-// here all the plugin context should be initialised and any data or flag required for
+// here all the plugin context should be initialized and any data or flag required for
 // plugins to execute the collect or flush callback.
 //
 //export FLBPluginInit
@@ -120,7 +120,7 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 }
 
 // FLBPluginInputCallback this method gets invoked by the fluent-bit runtime, once the plugin has been
-// initialised, the plugin implementation is responsible for handling the incoming data and the context
+// initialized, the plugin implementation is responsible for handling the incoming data and the context
 // that gets past, for long-living collectors the plugin itself should keep a running thread and fluent-bit
 // will not execute further callbacks.
 //
@@ -143,7 +143,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 
 		// Most plugins expect Collect to be invoked once and then takes over the
 		// input thread by running in an infinite loop. Here we simulate this
-		// behaviour and also simulate the original behaviour for those plugins that
+		// behavior and also simulate the original behavior for those plugins that
 		// do not hold on to the thread.
 		go func(runCtx context.Context) {
 			t := time.NewTicker(1000 * time.Nanosecond)
@@ -155,7 +155,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 					return
 				case <-t.C:
 					if err := theInput.Collect(runCtx, cbuf); err != nil {
-						fmt.Fprintf("Error collecting input: %s\n", err)
+						fmt.Fprintf(os.Stderr, "Error collecting input: %s\n", err)
 					}
 				}
 			}
