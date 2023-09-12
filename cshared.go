@@ -38,7 +38,7 @@ var (
 
 const (
 	collectInterval = time.Nanosecond * 1000
-
+	maxBufferedMessages = 300000
 )
 
 // FLBPluginRegister registers a plugin in the context of the fluent-bit runtime, a name and description
@@ -141,7 +141,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 	once.Do(func() {
 		runCtx, runCancel = context.WithCancel(context.Background())
 		// we need to configure this part....
-		theChannel = make(chan Message, 300000)
+		theChannel = make(chan Message, maxBufferedMessages)
 		// do we need to buffer this part???
 		cbuf := make(chan Message, 16)
 
