@@ -146,6 +146,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		}()
 		go func(cbuf chan Message) {
 			t := time.NewTicker(1 * time.Second)
+			defer t.Stop()
 			for {
 				buflock.Lock()
 				select {
