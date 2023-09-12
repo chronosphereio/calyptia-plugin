@@ -142,7 +142,9 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		cbuf := make(chan Message, 16)
 
 		go func() {
-			err = theInput.Collect(runCtx, cbuf)
+			if err := theInput.Collect(runCtx, cbuf); err != nil {
+				fmt.Fprintf("Error collecting input: %s\n", err)
+			}
 		}()
 		go func(cbuf chan Message) {
 			t := time.NewTicker(1 * time.Second)
