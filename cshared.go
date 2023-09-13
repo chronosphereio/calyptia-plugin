@@ -17,7 +17,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unsafe"
 
@@ -29,24 +28,17 @@ import (
 	"github.com/calyptia/plugin/output"
 )
 
-var (
-	unregister func()
-	cmt        *cmetrics.Context
-	logger     Logger
-	buflock    sync.Mutex
-)
-
 const (
-	// collectInterval is equal to the interval originally used in the high 
-	// frequency patch in fluent-bit.
-	collectInterval = time.Nanosecond * 1000
 	// maxBufferedMessages is the number of messages that will be buffered
 	// between each fluent-bit interval (approx 1 second).
-	maxBufferedMessages = 300000
-	// maxConcurrentChannels is the number of channels that will be buffered
-	// for incoming messages to the message buffer. These messages will be
-	// ingested as quickly as possible until the buffer is full.
-	maxConcurrentChannels = 16
+	defaultMaxBufferedMessages = 300000
+)
+
+var (
+	unregister          func()
+	cmt                 *cmetrics.Context
+	logger              Logger
+	maxBufferedMessages = defaultMaxBufferedMessages
 )
 
 // FLBPluginRegister registers a plugin in the context of the fluent-bit runtime, a name and description
@@ -110,6 +102,12 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 		}
 
 		err = theInput.Init(ctx, fbit)
+		if maxbuffered := fbit.Conf.String("go.MaxBufferedMessages"); maxbuffered != "" {
+			maxbuffered, err := strconv.Atoi(maxbuffered)
+			if err != nil {
+				maxBufferedMessages = maxbuffered
+			}
+		}
 	} else {
 		conf := &flbOutputConfigLoader{ptr: ptr}
 		cmt, err = output.FLBPluginGetCMetricsContext(ptr)
@@ -132,6 +130,13 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 	return input.FLB_OK
 }
 
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // FLBPluginInputCallback this method gets invoked by the fluent-bit runtime, once the plugin has been
 // initialized, the plugin implementation is responsible for handling the incoming data and the context
 // that gets past, for long-living collectors the plugin itself should keep a running thread and fluent-bit
@@ -148,68 +153,20 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 
 	once.Do(func() {
 		runCtx, runCancel = context.WithCancel(context.Background())
-
 		theChannel = make(chan Message, maxBufferedMessages)
-		cbuf := make(chan Message, maxConcurrentChannels)
 
-		// Most plugins expect Collect to be invoked once and then takes over the
-		// input thread by running in an infinite loop. Here we simulate this
-		// behavior and also simulate the original behavior for those plugins that
-		// do not hold on to the thread.
-		go func(runCtx context.Context) {
-			t := time.NewTicker(collectInterval)
-			defer t.Stop()
-
-			for {
-				select {
-				case <-runCtx.Done():
-					return
-				case <-t.C:
-					if err := theInput.Collect(runCtx, cbuf); err != nil {
-						fmt.Fprintf(os.Stderr, "Error collecting input: %s\n", err.Error())
-					}
-				}
+		go func(theChannel chan<- Message) {
+			err := theInput.Collect(runCtx, theChannel)
+			if err != nil {
+				fmt.Fprintf(os.Stderr,
+					"collect error: %s\n", err.Error())
 			}
-		}(runCtx)
-
-		// Limit submits to a single full buffer for each second. This limits
-		// the amount of locking when invoking the fluent-bit API.
-		go func(cbuf chan Message) {
-			t := time.NewTicker(1 * time.Second)
-			defer t.Stop()
-
-			// Use a mutex lock for the buffer to avoid filling the buffer more than
-			// once per period (1s). We also use the mutex lock to avoid infinitely
-			// filling the buffer while it is being flushed to fluent-bit.
-			for {
-				buflock.Lock()
-				select {
-				case msg, ok := <-cbuf:
-					if !ok {
-						continue
-					}
-					buflock.Unlock()
-					theChannel <- msg
-					buflock.Lock()
-				case <-t.C:
-					buflock.Unlock()
-					buflock.Lock()
-				case <-runCtx.Done():
-					buflock.Unlock()
-					return
-				}
-				buflock.Unlock()
-			}
-		}(cbuf)
+		}(theChannel)
 	})
 
 	buf := bytes.NewBuffer([]byte{})
 
-	// Here we read all the messages produced in the internal buffer submit them
-	// once for each period invocation. We lock the buffer so no new messages
-	// arrive while draining the buffer.
-	buflock.Lock()
-	for loop := len(theChannel) > 0; loop; {
+	for loop := min(len(theChannel), maxBufferedMessages); loop > 0; loop-- {
 		select {
 		case msg, ok := <-theChannel:
 			if !ok {
@@ -224,9 +181,6 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 			}
 			buf.Grow(len(b))
 			buf.Write(b)
-		default:
-			// when there are no more messages explicitly mark the loop be terminated.
-			loop = false
 		case <-runCtx.Done():
 			err := runCtx.Err()
 			if err != nil && !errors.Is(err, context.Canceled) {
@@ -237,16 +191,19 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 			// fluent-bit to kick in before any remaining data has not been GC'ed
 			// causing a sigsegv.
 			defer runtime.GC()
-			loop = false
+			loop = 0
+		default:
+			loop = 0
 		}
 	}
-	buflock.Unlock()
 
 	if buf.Len() > 0 {
 		b := buf.Bytes()
 		cdata := C.CBytes(b)
 		*data = cdata
-		*csize = C.size_t(len(b))
+		if csize != nil {
+			*csize = C.size_t(len(b))
+		}
 	}
 
 	return input.FLB_OK
