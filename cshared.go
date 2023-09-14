@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -146,7 +147,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		return input.FLB_RETRY
 	}
 
-	if runCtx == nil {
+	once.Do(func() {
 		runCtx, runCancel = context.WithCancel(context.Background())
 		theChannel = make(chan Message, maxBufferedMessages)
 
@@ -166,14 +167,13 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 					t.Reset(collectInterval)
 				case <-runCtx.Done():
 					t.Stop()
-					runCtx = nil
-					runCancel = nil
+					once = sync.Once{}
 					close(theChannel)
 					return
 				}
 			}
 		}(t, theChannel)
-	}
+	})
 
 	buf := bytes.NewBuffer([]byte{})
 
