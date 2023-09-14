@@ -132,13 +132,6 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 	return input.FLB_OK
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // FLBPluginInputCallback this method gets invoked by the fluent-bit runtime, once the plugin has been
 // initialized, the plugin implementation is responsible for handling the incoming data and the context
 // that gets past, for long-living collectors the plugin itself should keep a running thread and fluent-bit
@@ -154,8 +147,6 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 	}
 
 	if runCtx == nil {
-		fmt.Println("EXEC ONCE")
-
 		runCtx, runCancel = context.WithCancel(context.Background())
 		theChannel = make(chan Message, maxBufferedMessages)
 
