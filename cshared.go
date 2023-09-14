@@ -32,6 +32,8 @@ const (
 	// maxBufferedMessages is the number of messages that will be buffered
 	// between each fluent-bit interval (approx 1 second).
 	defaultMaxBufferedMessages = 300000
+	// collectInterval is set to the interval present before in core-fluent-bit.
+	collectInterval = 1000 * time.Nanosecond
 )
 
 var (
@@ -151,18 +153,36 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		return input.FLB_RETRY
 	}
 
-	once.Do(func() {
+	if runCtx == nil {
+		fmt.Println("EXEC ONCE")
+
 		runCtx, runCancel = context.WithCancel(context.Background())
 		theChannel = make(chan Message, maxBufferedMessages)
 
-		go func(theChannel chan<- Message) {
-			err := theInput.Collect(runCtx, theChannel)
-			if err != nil {
-				fmt.Fprintf(os.Stderr,
-					"collect error: %s\n", err.Error())
+		// We use a timer instead of a Ticker so that it is not
+		// rescheduled during a cancel().
+		t := time.NewTimer(collectInterval)
+
+		go func(t *time.Timer, theChannel chan<- Message) {
+			for {
+				select {
+				case <-t.C:
+					err := theInput.Collect(runCtx, theChannel)
+					if err != nil {
+						fmt.Fprintf(os.Stderr,
+							"collect error: %s\n", err.Error())
+					}
+					t.Reset(collectInterval)
+				case <-runCtx.Done():
+					t.Stop()
+					runCtx = nil
+					runCancel = nil
+					close(theChannel)
+					return
+				}
 			}
-		}(theChannel)
-	})
+		}(t, theChannel)
+	}
 
 	buf := bytes.NewBuffer([]byte{})
 

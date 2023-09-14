@@ -53,18 +53,22 @@ func (t testPluginInputCallbackInfinite) Init(ctx context.Context, fbit *Fluentb
 }
 
 func (t testPluginInputCallbackInfinite) Collect(ctx context.Context, ch chan<- Message) error {
-	go func(ch chan<- Message) {
-		testPluginInputCallbackInfiniteFuncs.Add(1)
-		for {
+	testPluginInputCallbackInfiniteFuncs.Add(1)
+	for {
+		select {
+		default:
 			ch <- Message{
 				Time: time.Now(),
 				Record: map[string]string{
 					"Foo": "BAR",
 				},
 			}
+		// for tests to correctly pass our infinite loop needs
+		// to return once the context has been finished.
+		case <-ctx.Done():
+			return nil
 		}
-	}(ch)
-	return nil
+	}
 }
 
 // TestInputCallbackInfinite is a test for the main method most plugins
@@ -94,9 +98,12 @@ func TestInputCallbackInfinite(t *testing.T) {
 		if testPluginInputCallbackInfiniteFuncs.Load() != 1 {
 			t.Fail()
 		}
+		return
 	case <-timeout.C:
+		runCancel()
 		t.Fail()
 	}
+	t.Fail()
 }
 
 type testInputCallbackInfiniteConcurrent struct{}
@@ -119,7 +126,14 @@ func (t testInputCallbackInfiniteConcurrent) Collect(ctx context.Context, ch cha
 			concurrentWait.Done()
 		}(ch, i)
 	}
-	return nil
+	// for tests to correctly pass our infinite loop needs
+	// to return once the context has been finished.
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		}
+	}
 }
 
 // TestInputCallbackInfiniteConcurrent is meant to make sure we do not
@@ -141,6 +155,7 @@ func TestInputCallbackInfiniteConcurrent(t *testing.T) {
 	case <-cdone:
 		runCancel()
 	case <-timeout.C:
+		runCancel()
 		t.Fail()
 	}
 }
