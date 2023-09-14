@@ -152,8 +152,9 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		theChannel = make(chan Message, maxBufferedMessages)
 
 		// We use a timer instead of a Ticker so that it is not
-		// rescheduled during a cancel().
-		t := time.NewTimer(collectInterval)
+		// rescheduled during a cancel(). We start the timer at 0
+		// so the first interval gets executed immediately.
+		t := time.NewTimer(0)
 
 		go func(t *time.Timer, theChannel chan<- Message) {
 			for {
