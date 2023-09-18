@@ -80,7 +80,7 @@ jobs:
 
       - name: Run GoReleaser
         if: ${{ github.event_name != 'pull_request' }}
-        uses: goreleaser/goreleaser-action@v4
+        uses: goreleaser/goreleaser-action@v5
         with:
           version: latest
           args: release --rm-dist
