@@ -44,6 +44,16 @@ var (
 	maxBufferedMessages = defaultMaxBufferedMessages
 )
 
+//export FLBPluginPreRegister
+func FLBPluginPreRegister(hotReloading C.int) int {
+	if hotReloading == C.int(1) {
+		initWG.Add(1)
+		registerWG.Add(1)
+	}
+
+	return input.FLB_OK
+}
+
 // FLBPluginRegister registers a plugin in the context of the fluent-bit runtime, a name and description
 // can be provided.
 //
@@ -72,6 +82,24 @@ func FLBPluginRegister(def unsafe.Pointer) int {
 	return out
 }
 
+func cleanup() int {
+	if unregister != nil {
+		unregister()
+		unregister = nil
+	}
+
+	if runCancel != nil {
+		runCancel()
+		runCancel = nil
+	}
+
+	if theChannel != nil {
+		defer close(theChannel)
+	}
+
+	return input.FLB_OK
+}
+
 // FLBPluginInit this method gets invoked once by the fluent-bit runtime at initialisation phase.
 // here all the plugin context should be initialized and any data or flag required for
 // plugins to execute the collect or flush callback.
@@ -79,8 +107,6 @@ func FLBPluginRegister(def unsafe.Pointer) int {
 //export FLBPluginInit
 func FLBPluginInit(ptr unsafe.Pointer) int {
 	defer initWG.Done()
-
-	registerWG.Wait()
 
 	if theInput == nil && theOutput == nil {
 		fmt.Fprintf(os.Stderr, "no input or output registered\n")
@@ -167,6 +193,104 @@ var theInputLock sync.Mutex
 //
 // This function will invoke Collect only once to preserve backward
 // compatible behavior. There are unit tests to enforce this behavior.
+func prepareInputCollector() (err error) {
+	runCtx, runCancel = context.WithCancel(context.Background())
+	theChannel = make(chan Message, maxBufferedMessages)
+
+	theInputLock.Lock()
+
+	go func(theChannel chan<- Message) {
+		defer theInputLock.Unlock()
+
+		err := theInput.Collect(runCtx, theChannel)
+		if err != nil {
+			fmt.Fprintf(os.Stderr,
+				"collect error: %s\n", err.Error())
+		}
+	}(theChannel)
+
+	return err
+}
+
+// FLBPluginInputPreRun this method gets invoked by the fluent-bit runtime, once the plugin has been
+// initialised, the plugin invoked only once before executing the input callbacks.
+//
+//export FLBPluginInputPreRun
+func FLBPluginInputPreRun(useHotReload C.int) int {
+	registerWG.Wait()
+
+	var err error
+	err = prepareInputCollector()
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "run: %s\n", err)
+		return input.FLB_ERROR
+	}
+
+	return input.FLB_OK
+}
+
+
+// FLBPluginInputPause this method gets invoked by the fluent-bit runtime, once the plugin has been
+// paused, the plugin invoked this method and entering paused state.
+//
+//export FLBPluginInputPause
+func FLBPluginInputPause() {
+	if runCancel != nil {
+		runCancel()
+		runCancel = nil
+	}
+
+	if theChannel != nil {
+		close(theChannel)
+		theChannel = nil
+	}
+}
+
+// FLBPluginInputResume this method gets invoked by the fluent-bit runtime, once the plugin has been
+// resumeed, the plugin invoked this method and re-running state.
+//
+//export FLBPluginInputResume
+func FLBPluginInputResume() {
+	var err error
+	err = prepareInputCollector()
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "run: %s\n", err)
+	}
+}
+
+//export FLBPluginOutputPreRun
+func FLBPluginOutputPreRun(useHotReload C.int) int {
+	registerWG.Wait()
+
+	var err error
+	runCtx, runCancel = context.WithCancel(context.Background())
+	theChannel = make(chan Message)
+	go func(runCtx context.Context) {
+		for {
+			select {
+			case <-runCtx.Done():
+				log.Printf("goroutine will be stopping: name=%q\n", theName)
+				return
+			default:
+				err = theOutput.Flush(runCtx, theChannel)
+			}
+		}
+	}(runCtx)
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "run: %s\n", err)
+		return output.FLB_ERROR
+	}
+
+	return output.FLB_OK
+}
+
+// FLBPluginInputCallback this method gets invoked by the fluent-bit runtime, once the plugin has been
+// initialised, the plugin implementation is responsible for handling the incoming data and the context
+// that gets past, for long-living collectors the plugin itself should keep a running thread and fluent-bit
+// will not execute further callbacks.
 //
 //export FLBPluginInputCallback
 func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
@@ -176,23 +300,6 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		fmt.Fprintf(os.Stderr, "no input registered\n")
 		return input.FLB_RETRY
 	}
-
-	once.Do(func() {
-		runCtx, runCancel = context.WithCancel(context.Background())
-		theChannel = make(chan Message, maxBufferedMessages)
-
-		theInputLock.Lock()
-
-		go func(theChannel chan<- Message) {
-			defer theInputLock.Unlock()
-
-			err := theInput.Collect(runCtx, theChannel)
-			if err != nil {
-				fmt.Fprintf(os.Stderr,
-					"collect error: %s\n", err.Error())
-			}
-		}(theChannel)
-	})
 
 	buf := bytes.NewBuffer([]byte{})
 
@@ -261,18 +368,6 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 	}
 
 	var err error
-	once.Do(func() {
-		runCtx, runCancel = context.WithCancel(context.Background())
-		theChannel = make(chan Message)
-		go func() {
-			err = theOutput.Flush(runCtx, theChannel)
-		}()
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "run: %s\n", err)
-		return output.FLB_ERROR
-	}
-
 	select {
 	case <-runCtx.Done():
 		err = runCtx.Err()
@@ -374,21 +469,7 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 //
 //export FLBPluginExit
 func FLBPluginExit() int {
-	log.Printf("calling FLBPluginExit(): name=%q\n", theName)
-
-	if unregister != nil {
-		unregister()
-	}
-
-	if runCancel != nil {
-		runCancel()
-	}
-
-	if theChannel != nil {
-		defer close(theChannel)
-	}
-
-	return input.FLB_OK
+	return cleanup()
 }
 
 type flbInputConfigLoader struct {
