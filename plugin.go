@@ -22,17 +22,18 @@ var (
 )
 
 var (
-	registerWG sync.WaitGroup
-	initWG     sync.WaitGroup
-	once       sync.Once
-	runCtx     context.Context
-	runCancel  context.CancelFunc
-	theChannel chan Message
+	registerWG   sync.WaitGroup
+	initWG       sync.WaitGroup
+	once         sync.Once
+	runCtx       context.Context
+	runCancel    context.CancelFunc
+	theChannel   chan Message
 )
 
 func init() {
 	registerWG.Add(1)
 	initWG.Add(1)
+	theChannel = nil
 }
 
 type Fluentbit struct {
