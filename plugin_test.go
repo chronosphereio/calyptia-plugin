@@ -99,7 +99,9 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 
 	t.Cleanup(func() {
 		_ = pool.Client.RemoveContainer(dc.RemoveContainerOptions{
-			ID: fbit.ID,
+			ID:            fbit.ID,
+			RemoveVolumes: true,
+			Force:         true,
 		})
 	})
 
@@ -118,6 +120,10 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 
 	err = pool.Client.StartContainer(fbit.ID, nil)
 	assert.NoError(t, err)
+
+	t.Cleanup(func() {
+		_ = pool.Client.StopContainer(fbit.ID, 6)
+	})
 
 	start := time.Now()
 
@@ -188,8 +194,6 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	}(t)
 
 	<-ctx.Done()
-
-	_ = pool.Client.StopContainer(fbit.ID, 6)
 
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		t.Fatal("timeout exceeded")

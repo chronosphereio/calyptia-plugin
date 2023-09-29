@@ -58,16 +58,19 @@ func (plug inputPlugin) Collect(ctx context.Context, send plugin.SendFunc) error
 			}
 
 			plug.collectCounter.Add(1)
-			plug.log.Info("[go-test-input-plugin] operation succeeded")
 
 			start := time.Now()
 			for i := 0; i < 10; i++ {
+				plug.log.Debug("[go-test-input-plugin] sending skip_me message")
 				send(time.Now().UTC(), map[string]any{
 					"skip_me": true,
 				})
 			}
 			took := time.Since(start)
 
+			plug.log.Debug("[go-test-input-plugin] sending many skip_me messages took %s", took)
+
+			plug.log.Debug("[go-test-input-plugin] sending message")
 			send(time.Now().UTC(), map[string]any{
 				"message":         "hello from go-test-input-plugin",
 				"foo":             plug.foo,
