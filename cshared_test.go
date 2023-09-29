@@ -13,7 +13,7 @@ func (t testPluginInputCallback) Init(ctx context.Context, fbit *Fluentbit) erro
 	return nil
 }
 
-func (t testPluginInputCallback) Collect(ctx context.Context, send func(msg Message)) error {
+func (t testPluginInputCallback) Collect(ctx context.Context, send func(t time.Time, record map[string]any)) error {
 	return nil
 }
 
