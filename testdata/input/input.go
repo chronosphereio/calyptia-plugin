@@ -73,7 +73,7 @@ func (plug inputPlugin) Collect(ctx context.Context, send plugin.SendFunc) error
 				"foo":             plug.foo,
 				"tmpl_out":        buff.String(),
 				"multiline_split": plug.multilineSplit,
-				"took":            took,
+				"took":            took.String(),
 			})
 		}
 	}
