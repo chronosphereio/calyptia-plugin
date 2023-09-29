@@ -130,7 +130,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		return input.FLB_RETRY
 	}
 
-	writeMsg := func(t time.Time, record map[string]any) {
+	writeMsg := func(t time.Time, record any) {
 		flbt := input.FLBTime{Time: t}
 		b, err := input.NewEncoder().Encode([]any{flbt, record})
 		if err != nil {
@@ -152,7 +152,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		runCtx, runCancel = context.WithCancel(context.Background())
 		theChannel = make(chan Message)
 		go func() {
-			errChan <- theInput.Collect(runCtx, func(t time.Time, record map[string]any) {
+			errChan <- theInput.Collect(runCtx, func(t time.Time, record any) {
 				go writeMsg(t, record)
 			})
 		}()

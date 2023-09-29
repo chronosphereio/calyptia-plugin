@@ -40,8 +40,10 @@ func (plug outputPlugin) Flush(ctx context.Context, ch <-chan plugin.Message) er
 	defer f.Close()
 
 	for msg := range ch {
-		if skip, ok := msg.Record["skipMe"].(bool); ok && skip {
-			continue
+		if m, ok := msg.Record.(map[string]any); ok {
+			if skip, ok := m["skip"].(bool); ok && skip {
+				continue
+			}
 		}
 
 		err := json.NewEncoder(f).Encode(msg.Record)
