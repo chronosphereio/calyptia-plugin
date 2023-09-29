@@ -148,20 +148,21 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		if !ok {
 			return input.FLB_OK
 		}
+		go func(msg Message) {
+			t := input.FLBTime{Time: msg.Time}
+			b, err := input.NewEncoder().Encode([]any{t, msg.Record})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "encode: %s\n", err)
+				return
+			}
 
-		t := input.FLBTime{Time: msg.Time}
-		b, err := input.NewEncoder().Encode([]any{t, msg.Record})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "encode: %s\n", err)
-			return input.FLB_ERROR
-		}
+			cdata := C.CBytes(b)
 
-		cdata := C.CBytes(b)
+			*data = cdata
+			*csize = C.size_t(len(b))
 
-		*data = cdata
-		*csize = C.size_t(len(b))
-
-		// C.free(unsafe.Pointer(cdata))
+			// C.free(unsafe.Pointer(cdata))
+		}(msg)
 	case <-runCtx.Done():
 		err := runCtx.Err()
 		if err != nil && !errors.Is(err, context.Canceled) {
