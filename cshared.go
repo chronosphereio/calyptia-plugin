@@ -130,39 +130,35 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		return input.FLB_RETRY
 	}
 
-	var err error
+	writeMsg := func(msg Message) {
+		t := input.FLBTime{Time: msg.Time}
+		b, err := input.NewEncoder().Encode([]any{t, msg.Record})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "encode: %s\n", err)
+			return
+		}
+
+		cdata := C.CBytes(b)
+
+		*data = cdata
+		*csize = C.size_t(len(b))
+
+		// C.free(unsafe.Pointer(cdata))
+	}
+
+	errChan := make(chan error, 1)
+
 	once.Do(func() {
 		runCtx, runCancel = context.WithCancel(context.Background())
 		theChannel = make(chan Message)
 		go func() {
-			err = theInput.Collect(runCtx, theChannel)
+			errChan <- theInput.Collect(runCtx, func(msg Message) {
+				go writeMsg(msg)
+			})
 		}()
 	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "run: %s\n", err)
-		return input.FLB_ERROR
-	}
 
 	select {
-	case msg, ok := <-theChannel:
-		if !ok {
-			return input.FLB_OK
-		}
-		go func(msg Message) {
-			t := input.FLBTime{Time: msg.Time}
-			b, err := input.NewEncoder().Encode([]any{t, msg.Record})
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "encode: %s\n", err)
-				return
-			}
-
-			cdata := C.CBytes(b)
-
-			*data = cdata
-			*csize = C.size_t(len(b))
-
-			// C.free(unsafe.Pointer(cdata))
-		}(msg)
 	case <-runCtx.Done():
 		err := runCtx.Err()
 		if err != nil && !errors.Is(err, context.Canceled) {
@@ -173,8 +169,12 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		// fluent-bit to kick in before any remaining data has not been GC'ed
 		// causing a sigsegv.
 		defer runtime.GC()
+	case err := <-errChan:
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "run: %s\n", err)
+			return input.FLB_ERROR
+		}
 	default:
-		break
 	}
 
 	return input.FLB_OK

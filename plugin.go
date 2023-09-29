@@ -44,7 +44,7 @@ type Fluentbit struct {
 // InputPlugin interface to represent an input fluent-bit plugin.
 type InputPlugin interface {
 	Init(ctx context.Context, fbit *Fluentbit) error
-	Collect(ctx context.Context, ch chan<- Message) error
+	Collect(ctx context.Context, send func(msg Message)) error
 }
 
 // OutputPlugin interface to represent an output fluent-bit plugin.
