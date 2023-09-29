@@ -139,11 +139,11 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 				}
 
 				var got struct {
-					Foo            string        `json:"foo"`
-					Message        string        `json:"message"`
-					TmplOut        string        `json:"tmpl_out"`
-					MultilineSplit []string      `json:"multiline_split"`
-					Took           time.Duration `json:"took"`
+					Foo            string   `json:"foo"`
+					Message        string   `json:"message"`
+					TmplOut        string   `json:"tmpl_out"`
+					MultilineSplit []string `json:"multiline_split"`
+					Took           string   `json:"took"`
 				}
 
 				err := json.Unmarshal([]byte(line), &got)
@@ -153,10 +153,9 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 				assert.Equal(t, "inside double quotes\nnew line", got.TmplOut)
 				assert.Equal(t, []string{"foo", "bar"}, got.MultilineSplit)
 
-				if got.Took > time.Second {
-					t.Errorf("send many took %s, expected less than 1s", got.Took)
-					return
-				}
+				took, err := time.ParseDuration(got.Took)
+				assert.NoError(t, err)
+				assert.True(t, took < time.Second, "send many should take less than a second")
 
 				t.Logf("took %s", time.Since(start))
 
