@@ -1,0 +1,2 @@
+{"skip_me":true}
+{"tmpl_out":"inside double quotes\nnew line","multiline_split":["foo","bar"],"message":"hello from go-test-input-plugin","foo":"bar"}

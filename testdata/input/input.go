@@ -37,7 +37,7 @@ func (plug *inputPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) error
 	return nil
 }
 
-func (plug inputPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) error {
+func (plug inputPlugin) Collect(ctx context.Context, send plugin.SendFunc) error {
 	tick := time.NewTicker(time.Second)
 
 	for {
@@ -51,6 +51,14 @@ func (plug inputPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) e
 
 			return nil
 		case <-tick.C:
+			start := time.Now()
+			for i := 0; i < 10; i++ {
+				send(time.Now(), map[string]any{
+					"skip_me": true,
+				})
+			}
+			took := time.Since(start)
+			plug.log.Info("[go-test-input-plugin] sent 10 messages in %s", took)
 
 			var buff strings.Builder
 			err := plug.tmpl.Execute(&buff, nil)
@@ -59,17 +67,14 @@ func (plug inputPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) e
 			}
 
 			plug.collectCounter.Add(1)
-			plug.log.Info("[go-test-input-plugin] operation succeeded")
+			plug.log.Info("[go-test-input-plugin] sending message")
 
-			ch <- plugin.Message{
-				Time: time.Now(),
-				Record: map[string]any{
-					"message":         "hello from go-test-input-plugin",
-					"foo":             plug.foo,
-					"tmpl_out":        buff.String(),
-					"multiline_split": plug.multilineSplit,
-				},
-			}
+			send(time.Now(), map[string]any{
+				"message":         "hello from go-test-input-plugin",
+				"foo":             plug.foo,
+				"tmpl_out":        buff.String(),
+				"multiline_split": plug.multilineSplit,
+			})
 		}
 	}
 }

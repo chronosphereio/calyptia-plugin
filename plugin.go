@@ -41,10 +41,14 @@ type Fluentbit struct {
 	Logger  Logger
 }
 
+// SendFunc sends a record from an input plugin.
+// `record` can be a `struct` or a `map[string]any`.
+type SendFunc func(t time.Time, record any)
+
 // InputPlugin interface to represent an input fluent-bit plugin.
 type InputPlugin interface {
 	Init(ctx context.Context, fbit *Fluentbit) error
-	Collect(ctx context.Context, ch chan<- Message) error
+	Collect(ctx context.Context, send SendFunc) error
 }
 
 // OutputPlugin interface to represent an output fluent-bit plugin.

@@ -13,7 +13,7 @@ func (t testPluginInputCallback) Init(ctx context.Context, fbit *Fluentbit) erro
 	return nil
 }
 
-func (t testPluginInputCallback) Collect(ctx context.Context, ch chan<- Message) error {
+func (t testPluginInputCallback) Collect(ctx context.Context, send SendFunc) error {
 	return nil
 }
 
