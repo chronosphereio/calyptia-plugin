@@ -37,7 +37,7 @@ func (plug *inputPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) error
 	return nil
 }
 
-func (plug inputPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) error {
+func (plug inputPlugin) Collect(ctx context.Context, send func(t time.Time, record map[string]any)) error {
 	tick := time.NewTicker(time.Second)
 
 	for {
@@ -61,15 +61,21 @@ func (plug inputPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) e
 			plug.collectCounter.Add(1)
 			plug.log.Info("[go-test-input-plugin] operation succeeded")
 
-			ch <- plugin.Message{
-				Time: time.Now(),
-				Record: map[string]any{
-					"message":         "hello from go-test-input-plugin",
-					"foo":             plug.foo,
-					"tmpl_out":        buff.String(),
-					"multiline_split": plug.multilineSplit,
-				},
+			start := time.Now()
+			for i := 0; i < 100; i++ {
+				send(time.Now().UTC(), map[string]any{
+					"skipMe": true,
+				})
 			}
+			took := time.Since(start)
+
+			send(time.Now().UTC(), map[string]any{
+				"message":         "hello from go-test-input-plugin",
+				"foo":             plug.foo,
+				"tmpl_out":        buff.String(),
+				"multiline_split": plug.multilineSplit,
+				"took":            took,
+			})
 		}
 	}
 }
