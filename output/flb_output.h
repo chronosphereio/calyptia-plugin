@@ -60,7 +60,8 @@ void output_log_print_novar(void *plugin, int log_level, const char* message)
 {
     struct flbgo_output_plugin *p = plugin;
     if (p->api->output_log_check(p->o_ins, log_level)) {
-        p->api->log_print(log_level, NULL, 0, message);
+        /* all formating is done in golang, avoid fmt string bugs. */
+        p->api->log_print(log_level, NULL, 0, "%s", message);
     }
 }
 

@@ -62,7 +62,8 @@ void input_log_print_novar(void *plugin, int log_level, const char* message)
 {
     struct flbgo_input_plugin *p = plugin;
     if (p->api->input_log_check(p->i_ins, log_level)) {
-        p->api->log_print(log_level, NULL, 0, message);
+        /* all formating is done in golang, avoid fmt string bugs. */
+        p->api->log_print(log_level, NULL, 0, "%s", message);
     }
 }
 
