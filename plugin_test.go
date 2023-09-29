@@ -147,7 +147,7 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 
 			lines := strings.Split(string(contents), "\n")
 
-			for _, line := range lines {
+			for i, line := range lines {
 				if line == "" {
 					continue
 				}
@@ -164,7 +164,7 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 				err := json.Unmarshal([]byte(line), &got)
 				assert.NoError(t, err)
 				if got.SkipMe {
-					t.Logf("skipping %s", line)
+					t.Logf("skipping line %d %s", i, line)
 					continue
 				}
 
@@ -195,7 +195,5 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 		t.Fatal("timeout exceeded")
 	}
 
-	if !asserted {
-		t.Fatal("expected to find output.txt")
-	}
+	assert.True(t, asserted)
 }
