@@ -27,6 +27,18 @@ func (plug *gdummyPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) erro
 	return nil
 }
 
+func safeSend(ch chan <- plugin.Message, value plugin.Message) (closed bool, err error) {
+	defer func() {
+		if recover() != nil {
+			closed = true
+			err = errors.New("Channel is closed")
+		}
+	}()
+
+	ch <- value
+	return false, nil
+}
+
 func (plug gdummyPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) error {
 	tick := time.NewTicker(time.Second)
 
@@ -46,11 +58,18 @@ func (plug gdummyPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) 
 			plug.counterSuccess.Add(1)
 			plug.log.Debug("[gdummy] operation succeeded")
 
-			ch <- plugin.Message{
+			closed, err := safeSend(ch, plugin.Message{
 				Time: time.Now(),
 				Record: map[string]string{
 					"message": "dummy",
 				},
+			})
+
+			if closed {
+				plug.counterFailure.Add(1)
+				plug.log.Error("[gdummy] operation failed. error: %v", err)
+
+				return err
 			}
 		}
 	}
