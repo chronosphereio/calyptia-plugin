@@ -41,8 +41,11 @@ func (plug outputPlugin) Flush(ctx context.Context, ch <-chan plugin.Message) er
 
 	for msg := range ch {
 		if m, ok := msg.Record.(map[string]any); ok {
-			if skip, ok := m["skip"].(bool); ok && skip {
-				continue
+			if v, ok := m["skip_me"]; ok {
+				if skipMe, ok := v.(bool); ok && skipMe {
+					plug.log.Info("[go-test-output-plugin] skipping record")
+					continue
+				}
 			}
 		}
 

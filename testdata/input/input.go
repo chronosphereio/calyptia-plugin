@@ -51,7 +51,6 @@ func (plug inputPlugin) Collect(ctx context.Context, send plugin.SendFunc) error
 
 			return nil
 		case <-tick.C:
-
 			var buff strings.Builder
 			err := plug.tmpl.Execute(&buff, nil)
 			if err != nil {
@@ -62,9 +61,9 @@ func (plug inputPlugin) Collect(ctx context.Context, send plugin.SendFunc) error
 			plug.log.Info("[go-test-input-plugin] operation succeeded")
 
 			start := time.Now()
-			for i := 0; i < 100; i++ {
+			for i := 0; i < 10; i++ {
 				send(time.Now().UTC(), map[string]any{
-					"skipMe": true,
+					"skip_me": true,
 				})
 			}
 			took := time.Since(start)

@@ -129,6 +129,9 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 				return
 			}
 
+			_, err := f.Seek(0, io.SeekStart)
+			assert.NoError(t, err)
+
 			contents, err := io.ReadAll(f)
 			assert.NoError(t, err)
 
@@ -145,6 +148,7 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 				}
 
 				var got struct {
+					SkipMe         bool     `json:"skip_me"`
 					Foo            string   `json:"foo"`
 					Message        string   `json:"message"`
 					TmplOut        string   `json:"tmpl_out"`
@@ -154,6 +158,11 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 
 				err := json.Unmarshal([]byte(line), &got)
 				assert.NoError(t, err)
+				if got.SkipMe {
+					t.Logf("skipping %s", line)
+					continue
+				}
+
 				assert.Equal(t, "bar", got.Foo)
 				assert.Equal(t, "hello from go-test-input-plugin", got.Message)
 				assert.Equal(t, "inside double quotes\nnew line", got.TmplOut)
