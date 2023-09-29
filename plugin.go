@@ -76,7 +76,7 @@ type Metrics interface {
 // from a plugin implementation.
 type Message struct {
 	Time   time.Time
-	Record any
+	Record map[string]any
 	tag    *string
 }
 

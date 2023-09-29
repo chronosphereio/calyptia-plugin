@@ -279,9 +279,9 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 			return output.FLB_ERROR
 		}
 
-		var rec map[string]string
+		var rec map[string]any
 		if d := len(recVal); d != 0 {
-			rec = make(map[string]string, d)
+			rec = make(map[string]any, d)
 			for k, v := range recVal {
 				key, ok := k.(string)
 				if !ok {
