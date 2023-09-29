@@ -121,6 +121,8 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	t.Cleanup(cancel)
 
+	var asserted bool
+
 	go func(t *testing.T) {
 		for {
 			if ctx.Err() != nil {
@@ -131,6 +133,10 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 			assert.NoError(t, err)
 
 			contents = bytes.TrimSpace(contents)
+			if len(contents) == 0 {
+				continue
+			}
+
 			lines := strings.Split(string(contents), "\n")
 
 			for _, line := range lines {
@@ -159,6 +165,8 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 
 				t.Logf("took %s", time.Since(start))
 
+				asserted = true
+
 				cancel()
 				return
 			}
@@ -172,5 +180,9 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		t.Fatal("timeout exceeded")
+	}
+
+	if !asserted {
+		t.Fatal("expected to find output.txt")
 	}
 }
