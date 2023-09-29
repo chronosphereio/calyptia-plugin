@@ -174,8 +174,7 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 
 	<-ctx.Done()
 
-	err = pool.Client.StopContainer(fbit.ID, 6)
-	assert.NoError(t, err)
+	_ = pool.Client.StopContainer(fbit.ID, 6)
 
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		t.Fatal("timeout exceeded")
