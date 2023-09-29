@@ -48,6 +48,9 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	err = os.Chmod(f.Name(), 0o777)
 	assert.NoError(t, err)
 
+	err = f.Truncate(0)
+	assert.NoError(t, err)
+
 	buildOpts := dc.BuildImageOptions{
 		Name:         "fluent-bit-go.localhost",
 		ContextDir:   ".",
@@ -129,11 +132,13 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 				return
 			}
 
-			_, err := f.Seek(0, io.SeekStart)
-			assert.NoError(t, err)
-
 			contents, err := io.ReadAll(f)
 			assert.NoError(t, err)
+
+			defer func() {
+				_, err := f.Seek(0, io.SeekStart)
+				assert.NoError(t, err)
+			}()
 
 			contents = bytes.TrimSpace(contents)
 			if len(contents) == 0 {

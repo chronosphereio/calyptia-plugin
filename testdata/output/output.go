@@ -40,15 +40,6 @@ func (plug outputPlugin) Flush(ctx context.Context, ch <-chan plugin.Message) er
 	defer f.Close()
 
 	for msg := range ch {
-		if m, ok := msg.Record.(map[string]any); ok {
-			if v, ok := m["skip_me"]; ok {
-				if skipMe, ok := v.(bool); ok && skipMe {
-					plug.log.Info("[go-test-output-plugin] skipping record")
-					continue
-				}
-			}
-		}
-
 		err := json.NewEncoder(f).Encode(msg.Record)
 		if err != nil {
 			plug.log.Error("[go-test-output-plugin] operation failed. reason %w", err)
