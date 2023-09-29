@@ -37,7 +37,7 @@ func (plug *inputPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) error
 	return nil
 }
 
-func (plug inputPlugin) Collect(ctx context.Context, send func(t time.Time, record map[string]any)) error {
+func (plug inputPlugin) Collect(ctx context.Context, send plugin.SendFunc) error {
 	tick := time.NewTicker(time.Second)
 
 	for {
