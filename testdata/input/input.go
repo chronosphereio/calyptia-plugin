@@ -70,10 +70,11 @@ func (plug inputPlugin) Collect(ctx context.Context, send plugin.SendFunc) error
 			plug.log.Info("[go-test-input-plugin] sending message")
 
 			send(time.Now(), map[string]any{
-				"message":         "hello from go-test-input-plugin",
-				"foo":             plug.foo,
-				"tmpl_out":        buff.String(),
-				"multiline_split": plug.multilineSplit,
+				"message":                  "hello from go-test-input-plugin",
+				"foo":                      plug.foo,
+				"tmpl_out":                 buff.String(),
+				"multiline_split":          plug.multilineSplit,
+				"took_to_send_10_messages": took.String(),
 			})
 		}
 	}

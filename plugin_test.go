@@ -139,11 +139,12 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 				}
 
 				var got struct {
-					SkipMe         bool     `json:"skip_me"`
-					Foo            string   `json:"foo"`
-					Message        string   `json:"message"`
-					TmplOut        string   `json:"tmpl_out"`
-					MultilineSplit []string `json:"multiline_split"`
+					SkipMe               bool     `json:"skip_me"`
+					Foo                  string   `json:"foo"`
+					Message              string   `json:"message"`
+					TmplOut              string   `json:"tmpl_out"`
+					MultilineSplit       []string `json:"multiline_split"`
+					TookToSend10Messages string   `json:"took_to_send_10_messages"`
 				}
 
 				err := json.Unmarshal([]byte(line), &got)
@@ -152,6 +153,11 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 				if got.SkipMe {
 					continue
 				}
+
+				tookToSend10Messages, err := time.ParseDuration(got.TookToSend10Messages)
+				assert.NoError(t, err)
+
+				assert.True(t, tookToSend10Messages < time.Millisecond*10)
 
 				assert.Equal(t, "bar", got.Foo)
 				assert.Equal(t, "hello from go-test-input-plugin", got.Message)
