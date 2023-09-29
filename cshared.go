@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -130,7 +131,11 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		return input.FLB_RETRY
 	}
 
+	var mu sync.Mutex
 	writeMsg := func(t time.Time, record any) {
+		mu.Lock()
+		defer mu.Unlock()
+
 		flbt := input.FLBTime{Time: t}
 		b, err := input.NewEncoder().Encode([]any{flbt, record})
 		if err != nil {
