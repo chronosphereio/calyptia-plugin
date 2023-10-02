@@ -1,82 +1,60 @@
 package main
 
 import (
-	"C"
+	"context"
 	"fmt"
-	"time"
-	"unsafe"
+	"reflect"
 
-	"github.com/calyptia/plugin/output"
+	"github.com/calyptia/plugin"
+	"github.com/calyptia/plugin/metric"
 )
 
-//export FLBPluginRegister
-func FLBPluginRegister(def unsafe.Pointer) int {
-	return output.FLBPluginRegister(def, "gstdout", "Stdout GO!")
+func init() {
+	plugin.RegisterOutput("gstdout", "StdOut GO!", &gstdoutPlugin{})
 }
 
-// (fluentbit will call this)
-// plugin (context) pointer to fluentbit context (state/ c code)
-//
-//export FLBPluginInit
-func FLBPluginInit(plugin unsafe.Pointer) int {
-	// Example to retrieve an optional configuration parameter
-	param := output.FLBPluginConfigKey(plugin, "param")
-	fmt.Printf("[flb-go] plugin parameter = '%s'\n", param)
-	return output.FLB_OK
+type gstdoutPlugin struct {
+	param        string
+	flushCounter metric.Counter
+	log          plugin.Logger
 }
 
-//export FLBPluginFlush
-func FLBPluginFlush(data unsafe.Pointer, length C.int, tag *C.char) int {
-	var count int
-	var ret int
-	var ts interface{}
-	var record map[interface{}]interface{}
+func (plug *gstdoutPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) error {
+	plug.flushCounter = fbit.Metrics.NewCounter("flush_total", "Total number of flushes", "gstdout")
+	plug.param = fbit.Conf.String("param")
+	plug.log = fbit.Logger
 
-	// Create Fluent Bit decoder
-	dec := output.NewDecoder(data, int(length))
+	return nil
+}
 
+func (plug gstdoutPlugin) Flush(ctx context.Context, ch <-chan plugin.Message) error {
 	// Iterate Records
-	count = 0
-	for {
-		// Extract Record
-		ret, ts, record = output.GetRecord(dec)
-		if ret != 0 {
-			break
-		}
+	count := 0
 
-		var timestamp time.Time
-		switch t := ts.(type) {
-		case output.FLBTime:
-			timestamp = ts.(output.FLBTime).Time
-		case uint64:
-			timestamp = time.Unix(int64(t), 0)
-		default:
-			fmt.Println("time provided invalid, defaulting to now.")
-			timestamp = time.Now()
-		}
+	for msg := range ch {
+		plug.flushCounter.Add(1)
+		plug.log.Debug("[gstdout] operation proceeded")
 
 		// Print record keys and values
-		fmt.Printf("[%d] %s: [%s, {", count, C.GoString(tag),
-			timestamp.String())
-		for k, v := range record {
-			fmt.Printf("\"%s\": %v, ", k, v)
+		fmt.Printf("[%d] %s: [%d.%d, {", count, msg.Tag(),
+			msg.Time.Unix(), msg.Time.Nanosecond())
+		rec := reflect.ValueOf(msg.Record)
+		if rec.Kind() == reflect.Map {
+			keyCount := 0
+			for _, key := range rec.MapKeys() {
+				if keyCount > 0 {
+					fmt.Printf(", ")
+				}
+				strct := rec.MapIndex(key)
+				fmt.Printf("\"%s\":\"%v\"", key.Interface(), strct.Interface())
+				keyCount++
+			}
 		}
-		fmt.Printf("}\n")
+		fmt.Printf("}]\n")
 		count++
 	}
 
-	// Return options:
-	//
-	// output.FLB_OK    = data have been processed.
-	// output.FLB_ERROR = unrecoverable error, do not try this again.
-	// output.FLB_RETRY = retry to flush later.
-	return output.FLB_OK
+	return nil
 }
 
-//export FLBPluginExit
-func FLBPluginExit() int {
-	return output.FLB_OK
-}
-
-func main() {
-}
+func main() {}
