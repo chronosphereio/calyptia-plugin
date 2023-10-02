@@ -116,12 +116,12 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	err = pool.Client.StartContainer(fbit.ID, nil)
 	assert.NoError(t, err)
 
-	start := time.Now()
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	t.Cleanup(cancel)
 
-	go func() {
+	var asserted bool
+
+	t.Run("go", func(t *testing.T) {
 		for {
 			if ctx.Err() != nil {
 				return
@@ -164,19 +164,21 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 				assert.Equal(t, "inside double quotes\nnew line", got.TmplOut)
 				assert.Equal(t, []string{"foo", "bar"}, got.MultilineSplit)
 
-				t.Logf("took %s", time.Since(start))
+				asserted = true
 
 				cancel()
 				return
 			}
 		}
-	}()
+	})
 
 	<-ctx.Done()
 
 	_ = pool.Client.StopContainer(fbit.ID, 6)
 
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		t.Fatal("timeout exceeded")
+		t.Fatal(ctx.Err())
 	}
+
+	assert.True(t, asserted)
 }
