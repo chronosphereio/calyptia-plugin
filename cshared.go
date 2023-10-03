@@ -414,24 +414,29 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 			return output.FLB_ERROR
 		}
 
-		if d := len(entry); d != 2 {
-			fmt.Fprintf(os.Stderr, "unexpected entry length: %d\n", d)
+		slice := reflect.ValueOf(entry)
+		if slice.Kind() != reflect.Slice || slice.Len() < 2 {
+			fmt.Fprintf(os.Stderr, "unexpected entry length: %d\n", slice.Len())
 			return output.FLB_ERROR
 		}
 
-		ft, ok := entry[0].(bigEndianTime)
-		if !ok {
+		var t time.Time
+		ts := slice.Index(0).Interface()
+		switch ft := ts.(type) {
+		case bigEndianTime:
+			t = time.Time(ft)
+		case []interface{}:
+			s := reflect.ValueOf(ft)
+			st := s.Index(0).Interface()
+			ty := st.(bigEndianTime)
+			t = time.Time(ty)
+		default:
 			fmt.Fprintf(os.Stderr, "unexpected entry time type: %T\n", entry[0])
 			return output.FLB_ERROR
 		}
 
-		t := time.Time(ft)
-
-		recVal, ok := entry[1].(map[any]any)
-		if !ok {
-			fmt.Fprintf(os.Stderr, "unexpected entry record type: %T\n", entry[1])
-			return output.FLB_ERROR
-		}
+		data := slice.Index(1)
+		recVal := data.Interface().(map[interface{}]interface{})
 
 		var rec map[string]string
 		if d := len(recVal); d != 0 {
@@ -443,13 +448,22 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 					return output.FLB_ERROR
 				}
 
-				val, ok := v.([]uint8)
-				if !ok {
+				var val string
+				switch tv := v.(type) {
+				case []uint8:
+					val = string(tv)
+				case uint64:
+					val = strconv.FormatUint(tv, 10)
+				case int64:
+					val = strconv.FormatInt(tv, 10)
+				case bool:
+					val = strconv.FormatBool(tv)
+				default:
 					fmt.Fprintf(os.Stderr, "unexpected record value type: %T\n", v)
 					return output.FLB_ERROR
 				}
 
-				rec[key] = string(val)
+				rec[key] = val
 			}
 		}
 
