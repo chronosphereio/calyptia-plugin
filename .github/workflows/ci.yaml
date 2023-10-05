@@ -57,19 +57,19 @@ jobs:
         run: |
           # go test -v -covermode=atomic -coverprofile=coverage.out ./...
           go test -v -covermode=atomic -coverprofile=coverage.out \
-                \^TestInputCallbackCtrlC\$ ./
+                -run \^TestInputCallbackCtrlC\$ ./
           go test -v -covermode=atomic -coverprofile=coverage.out \
-                \^TestInputCallbackDangle\$ ./
+                -run \^TestInputCallbackDangle\$ ./
           go test -v -covermode=atomic -coverprofile=coverage.out \
-                \^TestInputCallbackInfinite\$ ./
+                -run \^TestInputCallbackInfinite\$ ./
           go test -v -covermode=atomic -coverprofile=coverage.out \
-                \^TestInputCallbackInfiniteLatency\$ ./
+                -run \^TestInputCallbackInfiniteLatency\$ ./
           go test -v -covermode=atomic -coverprofile=coverage.out \
-                \^TestInputCallbackInfiniteConcurrent\$ ./
+                -run \^TestInputCallbackInfiniteConcurrent\$ ./
           go test -v -covermode=atomic -coverprofile=coverage.out \
-                \^TestPlugin\$ ./
+                -run \^TestPlugin\$ ./
           go test -v -covermode=atomic -coverprofile=coverage.out \
-                \^TestInputCallbackInfiniteConcurrent\$ ./
+                -run \^TestInputCallbackInfiniteConcurrent\$ ./
           go test -v -covermode=atomic -coverprofile=coverage.out \
                 ./configloader/
           go test -v -covermode=atomic -coverprofile=coverage.out \
