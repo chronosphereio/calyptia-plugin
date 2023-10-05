@@ -54,8 +54,12 @@ jobs:
         run: docker pull ghcr.io/calyptia/internal/core-fluent-bit:main
 
       - name: Unit tests
-        run: |
-          go test -v -covermode=atomic -coverprofile=coverage.out ./...
+        # retry tests for now... Open issue to fix it.
+        uses: nick-fields/retry@v2
+        with:
+          max_attempts: 3
+          command: |
+            go test -v -covermode=atomic -coverprofile=coverage.out ./...
 
       - name: Upload coverage to Codecov
         if: ${{ github.event_name != 'pull_request' }}

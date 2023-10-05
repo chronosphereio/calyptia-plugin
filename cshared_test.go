@@ -44,7 +44,7 @@ func TestInputCallbackCtrlC(t *testing.T) {
 	case <-cdone:
 		runCancel()
 	case <-timeout.C:
-		t.Fail()
+		t.Fatalf("timed out ...")
 	}
 }
 
@@ -99,9 +99,8 @@ func TestInputCallbackDangle(t *testing.T) {
 	// Test the assumption that only a single goroutine is
 	// ingesting records.
 	if testPluginInputCallbackDangleFuncs.Load() != 1 {
-		fmt.Printf("Too many callbacks: %d",
+		t.Fatalf("Too many callbacks: %d",
 			testPluginInputCallbackDangleFuncs.Load())
-		t.Fail()
 	}
 }
 
@@ -163,15 +162,15 @@ func TestInputCallbackInfinite(t *testing.T) {
 		// Test the assumption that only a single goroutine is
 		// ingesting records.
 		if testPluginInputCallbackInfiniteFuncs.Load() != 1 {
-			fmt.Printf("Too many callbacks: %d",
+			t.Fatalf("Too many callbacks: %d",
 				testPluginInputCallbackInfiniteFuncs.Load())
-			t.Fail()
 		}
 		return
 	case <-timeout.C:
-		fmt.Println("---- Timed out....")
 		runCancel()
-		t.Fail()
+		// This test seems to fail some what frequently because the Collect goroutine
+		// inside cshared is never being scheduled.
+		t.Fatalf("timed out ...")
 	}
 }
 
@@ -208,10 +207,16 @@ func TestInputCallbackLatency(t *testing.T) {
 
 	theInput = testPluginInputCallbackLatency{}
 	cdone := make(chan bool)
+	cstarted := make(chan bool)
 	cmsg := make(chan []byte)
 
 	go func() {
 		t := time.NewTicker(collectInterval)
+		buf, _ := testFLBPluginInputCallback()
+		if len(buf) > 0 {
+			cmsg <- buf
+		}
+		cstarted <- true
 		for {
 			select {
 			case <-cdone:
@@ -225,6 +230,7 @@ func TestInputCallbackLatency(t *testing.T) {
 		}
 	}()
 
+	<-cstarted
 	timeout := time.NewTimer(5 * time.Second)
 	msgs := 0
 
@@ -272,24 +278,31 @@ func TestInputCallbackLatency(t *testing.T) {
 type testInputCallbackInfiniteConcurrent struct{}
 
 var concurrentWait sync.WaitGroup
+var concurrentCountStart atomic.Int64
+var concurrentCountFinish atomic.Int64
 
 func (t testInputCallbackInfiniteConcurrent) Init(ctx context.Context, fbit *Fluentbit) error {
 	return nil
 }
 
 func (t testInputCallbackInfiniteConcurrent) Collect(ctx context.Context, ch chan<- Message) error {
-	defer flbPluginReset()
+	fmt.Printf("---- infinite concurrent collect\n")
 
 	for i := 0; i < 64; i++ {
 		go func(ch chan<- Message, id int) {
+			fmt.Printf("---- infinite concurrent started: %d\n", id)
+			concurrentCountStart.Add(1)
 			ch <- Message{
 				Time: time.Now(),
 				Record: map[string]string{
 					"ID": fmt.Sprintf("%d", id),
 				},
 			}
+			concurrentCountFinish.Add(1)
 			concurrentWait.Done()
+			fmt.Printf("---- infinite concurrent finished: %d\n", id)
 		}(ch, i)
+		fmt.Printf("---- infinite concurrent starting: %d\n", i)
 	}
 	// for tests to correctly pass our infinite loop needs
 	// to return once the context has been finished.
@@ -308,21 +321,43 @@ func TestInputCallbackInfiniteConcurrent(t *testing.T) {
 
 	theInput = testInputCallbackInfiniteConcurrent{}
 	cdone := make(chan bool)
-	timeout := time.NewTimer(10 * time.Second)
+	cstarted := make(chan bool)
 	ptr := unsafe.Pointer(nil)
 
 	concurrentWait.Add(64)
-	go func() {
+
+	go func(cstarted chan bool) {
+		ticker := time.NewTicker(time.Second * 1)
 		FLBPluginInputCallback(&ptr, nil)
+		cstarted <- true
+
+		for {
+			select {
+			case <-ticker.C:
+				FLBPluginInputCallback(&ptr, nil)
+			case <-runCtx.Done():
+				return
+			}
+		}
+	}(cstarted)
+
+	go func() {
 		concurrentWait.Wait()
 		cdone <- true
 	}()
+
+	<-cstarted
+	timeout := time.NewTimer(10 * time.Second)
 
 	select {
 	case <-cdone:
 		runCancel()
 	case <-timeout.C:
 		runCancel()
-		t.Fail()
+		// this test seems to timeout semi-frequently... need to get to
+		// the bottom of it...
+		t.Fatalf("---- timed out: %d/%d ...",
+			concurrentCountStart.Load(),
+			concurrentCountFinish.Load())
 	}
 }
