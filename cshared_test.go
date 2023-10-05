@@ -33,6 +33,8 @@ func TestInputCallbackCtrlC(t *testing.T) {
 	theInput = testPluginInputCallbackCtrlC{}
 	cdone := make(chan bool)
 	timeout := time.NewTimer(1 * time.Second)
+	defer timeout.Stop()
+
 	ptr := unsafe.Pointer(nil)
 
 	go func() {
@@ -79,6 +81,8 @@ func TestInputCallbackDangle(t *testing.T) {
 
 	go func() {
 		t := time.NewTicker(collectInterval)
+		defer t.Stop()
+
 		FLBPluginInputCallback(&ptr, nil)
 		for {
 			select {
@@ -138,24 +142,33 @@ func TestInputCallbackInfinite(t *testing.T) {
 
 	theInput = testPluginInputCallbackInfinite{}
 	cdone := make(chan bool)
+	cshutdown := make(chan bool)
 	ptr := unsafe.Pointer(nil)
 
 	go func() {
-		for {
-			FLBPluginInputCallback(&ptr, nil)
-			time.Sleep(collectInterval)
+		t := time.NewTicker(collectInterval)
+		defer t.Stop()
 
-			if ptr != nil {
-				cdone <- true
+		for {
+			select {
+			case <-t.C:
+				FLBPluginInputCallback(&ptr, nil)
+				if ptr != nil {
+					cdone <- true
+					return
+				}
+			case <-cshutdown:
+				return
 			}
 		}
 	}()
 
 	timeout := time.NewTimer(10 * time.Second)
+	defer timeout.Stop()
 
 	select {
 	case <-cdone:
-		timeout.Stop()
+		theInput = nil
 		runCancel()
 		// make sure Collect is not being invoked after Done().
 		time.Sleep(collectInterval * 10)
@@ -167,7 +180,9 @@ func TestInputCallbackInfinite(t *testing.T) {
 		}
 		return
 	case <-timeout.C:
+		theInput = nil
 		runCancel()
+		cshutdown <- true
 		// This test seems to fail some what frequently because the Collect goroutine
 		// inside cshared is never being scheduled.
 		t.Fatalf("timed out ...")
@@ -212,14 +227,18 @@ func TestInputCallbackLatency(t *testing.T) {
 
 	go func() {
 		t := time.NewTicker(collectInterval)
+		defer t.Stop()
+
 		buf, _ := testFLBPluginInputCallback()
 		if len(buf) > 0 {
 			cmsg <- buf
 		}
+
 		cstarted <- true
 		for {
 			select {
 			case <-cdone:
+				fmt.Println("---- collect done")
 				return
 			case <-t.C:
 				buf, _ := testFLBPluginInputCallback()
@@ -231,7 +250,10 @@ func TestInputCallbackLatency(t *testing.T) {
 	}()
 
 	<-cstarted
+	fmt.Println("---- started")
 	timeout := time.NewTimer(5 * time.Second)
+	defer timeout.Stop()
+
 	msgs := 0
 
 	for {
@@ -264,8 +286,9 @@ func TestInputCallbackLatency(t *testing.T) {
 				}
 			}
 		case <-timeout.C:
-			timeout.Stop()
+			theInput = nil
 			runCancel()
+			cdone <- true
 
 			if msgs < 128 {
 				t.Fatalf("too few messages: %d", msgs)
@@ -328,6 +351,8 @@ func TestInputCallbackInfiniteConcurrent(t *testing.T) {
 
 	go func(cstarted chan bool) {
 		ticker := time.NewTicker(time.Second * 1)
+		defer ticker.Stop()
+
 		FLBPluginInputCallback(&ptr, nil)
 		cstarted <- true
 
@@ -351,8 +376,10 @@ func TestInputCallbackInfiniteConcurrent(t *testing.T) {
 
 	select {
 	case <-cdone:
+		theInput = nil
 		runCancel()
 	case <-timeout.C:
+		theInput = nil
 		runCancel()
 		// this test seems to timeout semi-frequently... need to get to
 		// the bottom of it...
