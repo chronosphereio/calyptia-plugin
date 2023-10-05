@@ -30,7 +30,10 @@ func init() {
 func TestInputCallbackCtrlC(t *testing.T) {
 	defer flbPluginReset()
 
+	theInputLock.Lock()
 	theInput = testPluginInputCallbackCtrlC{}
+	theInputLock.Unlock()
+
 	cdone := make(chan bool)
 	timeout := time.NewTimer(1 * time.Second)
 	defer timeout.Stop()
@@ -44,6 +47,7 @@ func TestInputCallbackCtrlC(t *testing.T) {
 
 	select {
 	case <-cdone:
+		timeout.Stop()
 		runCancel()
 	case <-timeout.C:
 		t.Fatalf("timed out ...")
@@ -75,7 +79,10 @@ func (t testPluginInputCallbackDangle) Collect(ctx context.Context, ch chan<- Me
 func TestInputCallbackDangle(t *testing.T) {
 	defer flbPluginReset()
 
+	theInputLock.Lock()
 	theInput = testPluginInputCallbackDangle{}
+	theInputLock.Unlock()
+
 	cdone := make(chan bool)
 	ptr := unsafe.Pointer(nil)
 
@@ -99,6 +106,7 @@ func TestInputCallbackDangle(t *testing.T) {
 	<-timeout.C
 	timeout.Stop()
 	runCancel()
+	cdone <- true
 
 	// Test the assumption that only a single goroutine is
 	// ingesting records.
@@ -140,7 +148,10 @@ func (t testPluginInputCallbackInfinite) Collect(ctx context.Context, ch chan<- 
 func TestInputCallbackInfinite(t *testing.T) {
 	defer flbPluginReset()
 
+	theInputLock.Lock()
 	theInput = testPluginInputCallbackInfinite{}
+	theInputLock.Unlock()
+
 	cdone := make(chan bool)
 	cshutdown := make(chan bool)
 	ptr := unsafe.Pointer(nil)
@@ -168,7 +179,6 @@ func TestInputCallbackInfinite(t *testing.T) {
 
 	select {
 	case <-cdone:
-		theInput = nil
 		runCancel()
 		// make sure Collect is not being invoked after Done().
 		time.Sleep(collectInterval * 10)
@@ -180,7 +190,6 @@ func TestInputCallbackInfinite(t *testing.T) {
 		}
 		return
 	case <-timeout.C:
-		theInput = nil
 		runCancel()
 		cshutdown <- true
 		// This test seems to fail some what frequently because the Collect goroutine
@@ -220,7 +229,10 @@ func (t testPluginInputCallbackLatency) Collect(ctx context.Context, ch chan<- M
 func TestInputCallbackLatency(t *testing.T) {
 	defer flbPluginReset()
 
+	theInputLock.Lock()
 	theInput = testPluginInputCallbackLatency{}
+	theInputLock.Unlock()
+
 	cdone := make(chan bool)
 	cstarted := make(chan bool)
 	cmsg := make(chan []byte)
@@ -286,7 +298,6 @@ func TestInputCallbackLatency(t *testing.T) {
 				}
 			}
 		case <-timeout.C:
-			theInput = nil
 			runCancel()
 			cdone <- true
 
@@ -342,7 +353,10 @@ func (t testInputCallbackInfiniteConcurrent) Collect(ctx context.Context, ch cha
 func TestInputCallbackInfiniteConcurrent(t *testing.T) {
 	defer flbPluginReset()
 
+	theInputLock.Lock()
 	theInput = testInputCallbackInfiniteConcurrent{}
+	theInputLock.Unlock()
+
 	cdone := make(chan bool)
 	cstarted := make(chan bool)
 	ptr := unsafe.Pointer(nil)
@@ -376,10 +390,8 @@ func TestInputCallbackInfiniteConcurrent(t *testing.T) {
 
 	select {
 	case <-cdone:
-		theInput = nil
 		runCancel()
 	case <-timeout.C:
-		theInput = nil
 		runCancel()
 		// this test seems to timeout semi-frequently... need to get to
 		// the bottom of it...

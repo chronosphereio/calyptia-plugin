@@ -133,10 +133,14 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 	return input.FLB_OK
 }
 
-// flbPluginRest is meant to reset the plugin between tests.
+// flbPluginReset is meant to reset the plugin between tests.
 func flbPluginReset() {
+	theInputLock.Lock()
+	defer theInputLock.Unlock()
+
 	once = sync.Once{}
 	close(theChannel)
+	theInput = nil
 }
 
 func testFLBPluginInputCallback() ([]byte, error) {
@@ -152,6 +156,9 @@ func testFLBPluginInputCallback() ([]byte, error) {
 	defer C.free(data)
 	return C.GoBytes(data, C.int(csize)), nil
 }
+
+// Lock used to synchronize access to theInput variable.
+var theInputLock sync.Mutex
 
 // FLBPluginInputCallback this method gets invoked by the fluent-bit
 // runtime, once the plugin has been initialized, the plugin
@@ -174,7 +181,11 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		runCtx, runCancel = context.WithCancel(context.Background())
 		theChannel = make(chan Message, maxBufferedMessages)
 
+		theInputLock.Lock()
+
 		go func(theChannel chan<- Message) {
+			defer theInputLock.Unlock()
+
 			err := theInput.Collect(runCtx, theChannel)
 			if err != nil {
 				fmt.Fprintf(os.Stderr,
