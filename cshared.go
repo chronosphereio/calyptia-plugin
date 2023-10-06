@@ -201,8 +201,16 @@ func prepareInputCollector() (err error) {
 
 	go func(theChannel chan<- Message) {
 		defer theInputLock.Unlock()
+		for {
+			select {
+			case <-runCtx.Done():
+				log.Printf("goroutine will be stopping: name=%q\n", theName)
+				return
+			default:
+				err = theInput.Collect(runCtx, theChannel)
+			}
+		}
 
-		err := theInput.Collect(runCtx, theChannel)
 		if err != nil {
 			fmt.Fprintf(os.Stderr,
 				"collect error: %s\n", err.Error())
