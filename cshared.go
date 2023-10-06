@@ -201,13 +201,16 @@ func prepareInputCollector() (err error) {
 
 	go func(theChannel chan<- Message) {
 		defer theInputLock.Unlock()
+
+		go func(theChannel chan<- Message) {
+			err = theInput.Collect(runCtx, theChannel)
+		}(theChannel)
+
 		for {
 			select {
 			case <-runCtx.Done():
 				log.Printf("goroutine will be stopping: name=%q\n", theName)
 				return
-			default:
-				err = theInput.Collect(runCtx, theChannel)
 			}
 		}
 
@@ -276,15 +279,18 @@ func FLBPluginOutputPreRun(useHotReload C.int) int {
 	runCtx, runCancel = context.WithCancel(context.Background())
 	theChannel = make(chan Message)
 	go func(runCtx context.Context) {
+		go func(runCtx context.Context) {
+			err = theOutput.Flush(runCtx, theChannel)
+		}(runCtx)
+
 		for {
 			select {
 			case <-runCtx.Done():
 				log.Printf("goroutine will be stopping: name=%q\n", theName)
 				return
-			default:
-				err = theOutput.Flush(runCtx, theChannel)
 			}
 		}
+
 	}(runCtx)
 
 	if err != nil {
