@@ -55,7 +55,25 @@ jobs:
 
       - name: Unit tests
         run: |
-          go test -v -covermode=atomic -coverprofile=coverage.out ./...
+          # go test -v -covermode=atomic -coverprofile=coverage.out ./...
+          go test -v -covermode=atomic -coverprofile=coverage.out \
+                -run \^TestInputCallbackCtrlC\$ ./
+          go test -v -covermode=atomic -coverprofile=coverage.out \
+                -run \^TestInputCallbackDangle\$ ./
+          go test -v -covermode=atomic -coverprofile=coverage.out \
+                -run \^TestInputCallbackInfinite\$ ./
+          go test -v -covermode=atomic -coverprofile=coverage.out \
+                -run \^TestInputCallbackInfiniteLatency\$ ./
+          go test -v -covermode=atomic -coverprofile=coverage.out \
+                -run \^TestInputCallbackInfiniteConcurrent\$ ./
+          go test -v -covermode=atomic -coverprofile=coverage.out \
+                -run \^TestPlugin\$ ./
+          go test -v -covermode=atomic -coverprofile=coverage.out \
+                -run \^TestInputCallbackInfiniteConcurrent\$ ./
+          go test -v -covermode=atomic -coverprofile=coverage.out \
+                ./configloader/
+          go test -v -covermode=atomic -coverprofile=coverage.out \
+                ./output/
 
       - name: Upload coverage to Codecov
         if: ${{ github.event_name != 'pull_request' }}

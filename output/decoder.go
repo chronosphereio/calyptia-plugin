@@ -69,6 +69,17 @@ func NewDecoder(data unsafe.Pointer, length int) *FLBDecoder {
 	return dec
 }
 
+func NewByteDecoder(b []byte) *FLBDecoder {
+	dec := new(FLBDecoder)
+	dec.handle = new(codec.MsgpackHandle)
+	// TODO: handle error.
+	_ = dec.handle.SetBytesExt(reflect.TypeOf(FLBTime{}), 0, &FLBTime{})
+
+	dec.mpdec = codec.NewDecoderBytes(b, dec.handle)
+
+	return dec
+}
+
 func GetRecord(dec *FLBDecoder) (ret int, ts interface{}, rec map[interface{}]interface{}) {
 	var check error
 	var m interface{}
