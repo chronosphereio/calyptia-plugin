@@ -47,7 +47,6 @@ var (
 //export FLBPluginPreRegister
 func FLBPluginPreRegister(hotReloading C.int) int {
 	if hotReloading == C.int(1) {
-		initWG.Add(1)
 		registerWG.Add(1)
 	}
 
@@ -93,6 +92,9 @@ func cleanup() int {
 		runCancel = nil
 	}
 
+	theInputLock.Lock()
+	defer theInputLock.Unlock()
+
 	if theChannel != nil {
 		defer close(theChannel)
 	}
@@ -106,6 +108,8 @@ func cleanup() int {
 //
 //export FLBPluginInit
 func FLBPluginInit(ptr unsafe.Pointer) int {
+	initWG.Add(1)
+
 	defer initWG.Done()
 
 	if theInput == nil && theOutput == nil {
@@ -195,13 +199,15 @@ var theInputLock sync.Mutex
 // compatible behavior. There are unit tests to enforce this behavior.
 func prepareInputCollector() (err error) {
 	runCtx, runCancel = context.WithCancel(context.Background())
-	theChannel = make(chan Message, maxBufferedMessages)
 
 	theInputLock.Lock()
+	if theChannel == nil {
+		theChannel = make(chan Message, maxBufferedMessages)
+	}
+
+	defer theInputLock.Unlock()
 
 	go func(theChannel chan<- Message) {
-		defer theInputLock.Unlock()
-
 		go func(theChannel chan<- Message) {
 			err = theInput.Collect(runCtx, theChannel)
 		}(theChannel)
@@ -241,7 +247,6 @@ func FLBPluginInputPreRun(useHotReload C.int) int {
 	return input.FLB_OK
 }
 
-
 // FLBPluginInputPause this method gets invoked by the fluent-bit runtime, once the plugin has been
 // paused, the plugin invoked this method and entering paused state.
 //
@@ -251,6 +256,9 @@ func FLBPluginInputPause() {
 		runCancel()
 		runCancel = nil
 	}
+
+	theInputLock.Lock()
+	defer theInputLock.Unlock()
 
 	if theChannel != nil {
 		close(theChannel)
@@ -268,6 +276,25 @@ func FLBPluginInputResume() {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "run: %s\n", err)
+	}
+}
+
+// FLBPluginOutputPreExit this method gets invoked by the fluent-bit runtime, once the plugin has been
+// exited, the plugin invoked this method and entering exiting state.
+//
+//export FLBPluginOutputPreExit
+func FLBPluginOutputPreExit() {
+	if runCancel != nil {
+		runCancel()
+		runCancel = nil
+	}
+
+	theInputLock.Lock()
+	defer theInputLock.Unlock()
+
+	if theChannel != nil {
+		close(theChannel)
+		theChannel = nil
 	}
 }
 
