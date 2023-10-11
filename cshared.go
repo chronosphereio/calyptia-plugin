@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
 	"reflect"
 	"runtime"
@@ -317,7 +318,7 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 
 	buf := bytes.NewBuffer([]byte{})
 
-	for loop := min(len(theChannel), maxBufferedMessages); loop > 0; loop-- {
+	for loop := math.Min(float64(len(theChannel)), float64(maxBufferedMessages)); loop > 0; loop-- {
 		select {
 		case msg, ok := <-theChannel:
 			if !ok {
