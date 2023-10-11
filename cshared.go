@@ -109,7 +109,6 @@ func cleanup() int {
 //export FLBPluginInit
 func FLBPluginInit(ptr unsafe.Pointer) int {
 	initWG.Add(1)
-
 	defer initWG.Done()
 
 	if theInput == nil && theOutput == nil {
@@ -190,24 +189,26 @@ func testFLBPluginInputCallback() ([]byte, error) {
 // Lock used to synchronize access to theInput variable.
 var theInputLock sync.Mutex
 
-// FLBPluginInputCallback this method gets invoked by the fluent-bit
-// runtime, once the plugin has been initialized, the plugin
-// implementation is responsible for handling the incoming data and the
-// context that gets past
-//
-// This function will invoke Collect only once to preserve backward
-// compatible behavior. There are unit tests to enforce this behavior.
-func prepareInputCollector() (err error) {
+// prepareInputCollector is meant to prepare resources for input collectors
+func prepareInputCollector(multiInstance bool) (err error) {
 	runCtx, runCancel = context.WithCancel(context.Background())
-
-	theInputLock.Lock()
-	if theChannel == nil {
+	if !multiInstance {
 		theChannel = make(chan Message, maxBufferedMessages)
 	}
 
-	defer theInputLock.Unlock()
+	theInputLock.Lock()
+	if multiInstance {
+		if theChannel == nil {
+			theChannel = make(chan Message, maxBufferedMessages)
+		}
+		defer theInputLock.Unlock()
+	}
 
 	go func(theChannel chan<- Message) {
+		if !multiInstance {
+			defer theInputLock.Unlock()
+		}
+
 		go func(theChannel chan<- Message) {
 			err = theInput.Collect(runCtx, theChannel)
 		}(theChannel)
@@ -237,7 +238,7 @@ func FLBPluginInputPreRun(useHotReload C.int) int {
 	registerWG.Wait()
 
 	var err error
-	err = prepareInputCollector()
+	err = prepareInputCollector(true)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "run: %s\n", err)
@@ -272,7 +273,7 @@ func FLBPluginInputPause() {
 //export FLBPluginInputResume
 func FLBPluginInputResume() {
 	var err error
-	err = prepareInputCollector()
+	err = prepareInputCollector(true)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "run: %s\n", err)
@@ -332,6 +333,9 @@ func FLBPluginOutputPreRun(useHotReload C.int) int {
 // initialised, the plugin implementation is responsible for handling the incoming data and the context
 // that gets past, for long-living collectors the plugin itself should keep a running thread and fluent-bit
 // will not execute further callbacks.
+//
+// This function will invoke Collect only once to preserve backward
+// compatible behavior. There are unit tests to enforce this behavior.
 //
 //export FLBPluginInputCallback
 func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {

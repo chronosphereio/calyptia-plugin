@@ -23,7 +23,6 @@ func (t testPluginInputCallbackCtrlC) Collect(ctx context.Context, ch chan<- Mes
 }
 
 func init() {
-	initWG.Done()
 	registerWG.Done()
 }
 
@@ -41,7 +40,7 @@ func TestInputCallbackCtrlC(t *testing.T) {
 	ptr := unsafe.Pointer(nil)
 
 	// prepare channel for input explicitly.
-	err := prepareInputCollector()
+	err := prepareInputCollector(false)
 	if err != nil {
 		t.Fail()
 		return
@@ -94,7 +93,7 @@ func TestInputCallbackDangle(t *testing.T) {
 	ptr := unsafe.Pointer(nil)
 
 	// prepare channel for input explicitly.
-	err := prepareInputCollector()
+	err := prepareInputCollector(false)
 	if err != nil {
 		t.Fail()
 	}
@@ -170,7 +169,7 @@ func TestInputCallbackInfinite(t *testing.T) {
 	ptr := unsafe.Pointer(nil)
 
 	// prepare channel for input explicitly.
-	err := prepareInputCollector()
+	err := prepareInputCollector(false)
 	if err != nil {
 		t.Fail()
 		return
@@ -258,7 +257,7 @@ func TestInputCallbackLatency(t *testing.T) {
 	cmsg := make(chan []byte)
 
 	// prepare channel for input explicitly.
-	err := prepareInputCollector()
+	err := prepareInputCollector(false)
 	if err != nil {
 		t.Fail()
 		return
@@ -391,7 +390,7 @@ func TestInputCallbackInfiniteConcurrent(t *testing.T) {
 	concurrentWait.Add(64)
 
 	// prepare channel for input explicitly.
-	err := prepareInputCollector()
+	err := prepareInputCollector(false)
 	if err != nil {
 		t.Fail()
 	}
