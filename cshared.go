@@ -92,7 +92,9 @@ func cleanup() int {
 		runCancel = nil
 	}
 
-	theInputLock.Lock()
+	if !theInputLock.TryLock() {
+		return input.FLB_OK
+	}
 	defer theInputLock.Unlock()
 
 	if theChannel != nil {
@@ -258,7 +260,9 @@ func FLBPluginInputPause() {
 		runCancel = nil
 	}
 
-	theInputLock.Lock()
+	if !theInputLock.TryLock() {
+		return
+	}
 	defer theInputLock.Unlock()
 
 	if theChannel != nil {
@@ -290,7 +294,9 @@ func FLBPluginOutputPreExit() {
 		runCancel = nil
 	}
 
-	theInputLock.Lock()
+	if !theInputLock.TryLock() {
+		return
+	}
 	defer theInputLock.Unlock()
 
 	if theChannel != nil {
