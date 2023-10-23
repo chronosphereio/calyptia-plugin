@@ -40,6 +40,13 @@ func TestInputCallbackCtrlC(t *testing.T) {
 
 	ptr := unsafe.Pointer(nil)
 
+	// prepare channel for input explicitly.
+	err := prepareInputCollector()
+	if err != nil {
+		t.Fail()
+		return
+	}
+
 	go func() {
 		FLBPluginInputCallback(&ptr, nil)
 		cdone <- true
@@ -85,6 +92,12 @@ func TestInputCallbackDangle(t *testing.T) {
 
 	cdone := make(chan bool)
 	ptr := unsafe.Pointer(nil)
+
+	// prepare channel for input explicitly.
+	err := prepareInputCollector()
+	if err != nil {
+		t.Fail()
+	}
 
 	go func() {
 		t := time.NewTicker(collectInterval)
@@ -155,6 +168,13 @@ func TestInputCallbackInfinite(t *testing.T) {
 	cdone := make(chan bool)
 	cshutdown := make(chan bool)
 	ptr := unsafe.Pointer(nil)
+
+	// prepare channel for input explicitly.
+	err := prepareInputCollector()
+	if err != nil {
+		t.Fail()
+		return
+	}
 
 	go func() {
 		t := time.NewTicker(collectInterval)
@@ -236,6 +256,13 @@ func TestInputCallbackLatency(t *testing.T) {
 	cdone := make(chan bool)
 	cstarted := make(chan bool)
 	cmsg := make(chan []byte)
+
+	// prepare channel for input explicitly.
+	err := prepareInputCollector()
+	if err != nil {
+		t.Fail()
+		return
+	}
 
 	go func() {
 		t := time.NewTicker(collectInterval)
@@ -362,6 +389,12 @@ func TestInputCallbackInfiniteConcurrent(t *testing.T) {
 	ptr := unsafe.Pointer(nil)
 
 	concurrentWait.Add(64)
+
+	// prepare channel for input explicitly.
+	err := prepareInputCollector()
+	if err != nil {
+		t.Fail()
+	}
 
 	go func(cstarted chan bool) {
 		ticker := time.NewTicker(time.Second * 1)

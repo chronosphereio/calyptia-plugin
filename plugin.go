@@ -33,6 +33,7 @@ var (
 func init() {
 	registerWG.Add(1)
 	initWG.Add(1)
+	theChannel = nil
 }
 
 type Fluentbit struct {
