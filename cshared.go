@@ -168,6 +168,12 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 func flbPluginReset() {
 	theInputLock.Lock()
 	defer theInputLock.Unlock()
+	defer func() {
+		if ret := recover(); ret != nil {
+			fmt.Fprintf(os.Stderr, "Channel is already closed")
+			return
+		}
+	}()
 
 	once = sync.Once{}
 	close(theChannel)
