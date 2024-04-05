@@ -1,14 +1,18 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 	"unsafe"
 
+	"github.com/calyptia/plugin/input"
+	"github.com/calyptia/plugin/metric"
 	"github.com/calyptia/plugin/output"
 )
 
@@ -425,5 +429,197 @@ func TestInputCallbackInfiniteConcurrent(t *testing.T) {
 		t.Fatalf("---- timed out: %d/%d ...",
 			concurrentCountStart.Load(),
 			concurrentCountFinish.Load())
+	}
+}
+
+type testOutputHandlerReflect struct {
+	param        string
+	flushCounter metric.Counter
+	log          Logger
+}
+
+func (plug *testOutputHandlerReflect) Init(ctx context.Context, fbit *Fluentbit) error {
+	plug.flushCounter = fbit.Metrics.NewCounter("flush_total", "Total number of flushes", "gstdout")
+	plug.param = fbit.Conf.String("param")
+	plug.log = fbit.Logger
+
+	return nil
+}
+
+func (plug *testOutputHandlerReflect) Flush(ctx context.Context, ch <-chan Message) error {
+	// Iterate Records
+	count := 0
+	printout := bytes.NewBuffer([]byte{})
+
+	for {
+		select {
+		case msg := <-ch:
+			rec := reflect.ValueOf(msg.Record)
+			printout.WriteString("[{")
+			if rec.Kind() == reflect.Map {
+				keyCount := 0
+				for _, key := range rec.MapKeys() {
+					if keyCount > 0 {
+						printout.WriteString(", ")
+					}
+					strct := rec.MapIndex(key)
+					printout.WriteString(
+						fmt.Sprintf("\"%s\":\"%v\"",
+							key.Interface(), strct.Interface()))
+					keyCount++
+				}
+			}
+			printout.WriteString("}]")
+			count++
+		case <-ctx.Done():
+			if count <= 0 {
+				return fmt.Errorf("no records flushed")
+			}
+			fmt.Print(printout.String())
+			return nil
+		}
+	}
+}
+
+type testOutputHandlerMapString struct {
+	param        string
+	flushCounter metric.Counter
+	log          Logger
+}
+
+func (plug *testOutputHandlerMapString) Init(ctx context.Context, fbit *Fluentbit) error {
+	plug.flushCounter = fbit.Metrics.NewCounter("flush_total", "Total number of flushes", "gstdout")
+	plug.param = fbit.Conf.String("param")
+	plug.log = fbit.Logger
+
+	return nil
+}
+
+func (plug *testOutputHandlerMapString) Flush(ctx context.Context, ch <-chan Message) error {
+	count := 0
+	printout := bytes.NewBuffer([]byte{})
+
+	for {
+		select {
+		case msg := <-ch:
+			printout.WriteString("[{")
+			keyCount := 0
+			record, ok := msg.Record.(map[string]interface{})
+			if !ok {
+				panic("unable to convert record")
+			}
+			for key, value := range record {
+				if keyCount > 0 {
+					printout.WriteString(", ")
+				}
+
+				val, ok := value.(string)
+				if !ok {
+					panic("unable to convert value")
+				}
+
+				printout.WriteString(
+					fmt.Sprintf("\"%s\":\"%v\"", key, val))
+				keyCount++
+			}
+			printout.WriteString("}]")
+			count++
+		case <-ctx.Done():
+			if count <= 0 {
+				return fmt.Errorf("no records flushed")
+			}
+			fmt.Print(printout.String())
+			return nil
+		}
+	}
+}
+
+// TestOutput is a simple output test. It also shows which format of records
+// we currently support and how they should be handled. Feel free to use this
+// code as an example of how to implement the Flush receive for output plugins.
+//
+// At the moment all Message.Records will be sent as a `map[string]interface{}`.
+// Older plugins will have to do as testOutputHandlerMapString.Flush does
+// and cast the actual value as a string.
+func TestOutputSimulated(t *testing.T) {
+	var wg sync.WaitGroup
+	ctxt, cancel := context.WithCancel(context.Background())
+	ch := make(chan Message)
+	tag := "tag"
+
+	outputReflect := testOutputHandlerReflect{}
+
+	wg.Add(1)
+	go func(ctxt context.Context, wg *sync.WaitGroup, ch <-chan Message) {
+		err := outputReflect.Flush(ctxt, ch)
+		if err != nil {
+			t.Error(err)
+			t.Fail()
+		}
+		wg.Done()
+	}(ctxt, &wg, ch)
+
+	ch <- Message{
+		Time: time.Now(),
+		Record: map[string]interface{}{
+			"foo":    "bar",
+			"foobar": "1",
+		},
+		tag: &tag,
+	}
+
+	cancel()
+	wg.Wait()
+	wg = sync.WaitGroup{}
+	ctxt, cancel = context.WithCancel(context.Background())
+
+	outputMapString := testOutputHandlerMapString{}
+
+	wg.Add(1)
+	go func(ctxt context.Context, wg *sync.WaitGroup, ch <-chan Message) {
+		err := outputMapString.Flush(ctxt, ch)
+		if err != nil {
+			t.Error(err)
+			t.Fail()
+		}
+		wg.Done()
+	}(ctxt, &wg, ch)
+
+	ch <- Message{
+		Time: time.Now(),
+		Record: map[string]interface{}{
+			"foo":    "bar",
+			"foobar": "1",
+		},
+		tag: &tag,
+	}
+
+	cancel()
+	wg.Wait()
+	close(ch)
+}
+
+func TestOutputFlush(t *testing.T) {
+	out := testOutputHandlerReflect{}
+	_ = prepareOutputFlush(&out)
+
+	msg := Message{
+		Record: map[interface{}]interface{}{
+			"foo":    "bar",
+			"bar":    0,
+			"foobar": 1.337,
+		},
+	}
+
+	tm := input.FLBTime{Time: msg.Time}
+	b, err := input.NewEncoder().Encode([]any{tm, msg.Record})
+	if err != nil {
+		t.Error(err)
+		t.Fail()
+	}
+
+	if err := pluginFlush("foobar", b); err == output.FLB_ERROR {
+		t.Error(err)
+		t.Fail()
 	}
 }

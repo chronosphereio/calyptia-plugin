@@ -194,6 +194,12 @@ func testFLBPluginInputCallback() ([]byte, error) {
 	return C.GoBytes(data, C.int(csize)), nil
 }
 
+func prepareOutputFlush(output OutputPlugin) error {
+	theOutput = output
+	FLBPluginOutputPreRun(0)
+	return nil
+}
+
 // Lock used to synchronize access to theInput variable.
 var theInputLock sync.Mutex
 
@@ -417,6 +423,8 @@ func FLBPluginInputCleanupCallback(data unsafe.Pointer) int {
 //export FLBPluginFlush
 //nolint:funlen //ignore length requirement for this function
 func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
+	var err error
+
 	initWG.Wait()
 
 	if theOutput == nil {
@@ -424,7 +432,6 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 		return output.FLB_RETRY
 	}
 
-	var err error
 	select {
 	case <-runCtx.Done():
 		err = runCtx.Err()
@@ -438,6 +445,59 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 	}
 
 	in := C.GoBytes(data, clength)
+	tag := C.GoString(ctag)
+
+	return pluginFlush(tag, in)
+}
+
+func decodeEntry(tag string, entry []any) (*Message, error) {
+	var t time.Time
+
+	slice := reflect.ValueOf(entry)
+	if slice.Kind() != reflect.Slice || slice.Len() < 2 {
+		return nil, fmt.Errorf("unexpected entry length: %d", slice.Len())
+	}
+
+	ts := slice.Index(0).Interface()
+	switch ft := ts.(type) {
+	case bigEndianTime:
+		t = time.Time(ft)
+	case []interface{}:
+		s := reflect.ValueOf(ft)
+		st := s.Index(0).Interface()
+		ty, ok := st.(bigEndianTime)
+		if !ok {
+			return nil, fmt.Errorf("unable to decode time in record metadata")
+		}
+		t = time.Time(ty)
+	default:
+		return nil, fmt.Errorf("unexpected entry time type: %T", entry[0])
+	}
+
+	data := slice.Index(1)
+	recVal, ok := data.Interface().(map[interface{}]interface{})
+	if !ok {
+		return nil, nil
+	}
+
+	var rec map[string]interface{}
+	if d := len(recVal); d != 0 {
+		rec = make(map[string]interface{}, d)
+		for k, v := range recVal {
+			key, ok := k.(string)
+			if !ok {
+				return nil, fmt.Errorf("unexpected record key type: %T", k)
+			}
+			rec[key] = v
+		}
+	}
+
+	return &Message{Time: t, Record: rec, tag: &tag}, nil
+}
+
+func pluginFlush(tag string, in []byte) int {
+	var err error
+
 	h := &codec.MsgpackHandle{}
 	err = h.SetBytesExt(reflect.TypeOf(bigEndianTime{}), 0, &bigEndianTime{})
 	if err != nil {
@@ -471,66 +531,13 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 			return output.FLB_ERROR
 		}
 
-		slice := reflect.ValueOf(entry)
-		if slice.Kind() != reflect.Slice || slice.Len() < 2 {
-			fmt.Fprintf(os.Stderr, "unexpected entry length: %d\n", slice.Len())
+		msg, err := decodeEntry(tag, entry)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "decode error: %s\n", err)
 			return output.FLB_ERROR
 		}
 
-		var t time.Time
-		ts := slice.Index(0).Interface()
-		switch ft := ts.(type) {
-		case bigEndianTime:
-			t = time.Time(ft)
-		case []interface{}:
-			s := reflect.ValueOf(ft)
-			st := s.Index(0).Interface()
-			ty := st.(bigEndianTime)
-			t = time.Time(ty)
-		default:
-			fmt.Fprintf(os.Stderr, "unexpected entry time type: %T\n", entry[0])
-			return output.FLB_ERROR
-		}
-
-		data := slice.Index(1)
-		recVal := data.Interface().(map[interface{}]interface{})
-
-		var rec map[string]string
-		if d := len(recVal); d != 0 {
-			rec = make(map[string]string, d)
-			for k, v := range recVal {
-				key, ok := k.(string)
-				if !ok {
-					fmt.Fprintf(os.Stderr, "unexpected record key type: %T\n", k)
-					return output.FLB_ERROR
-				}
-
-				var val string
-				switch tv := v.(type) {
-				case []uint8:
-					val = string(tv)
-				case uint64:
-					val = strconv.FormatUint(tv, 10)
-				case int64:
-					val = strconv.FormatInt(tv, 10)
-				case bool:
-					val = strconv.FormatBool(tv)
-				default:
-					fmt.Fprintf(os.Stderr, "unexpected record value type: %T\n", v)
-					return output.FLB_ERROR
-				}
-
-				rec[key] = val
-			}
-		}
-
-		tag := C.GoString(ctag)
-		// C.free(unsafe.Pointer(ctag))
-
-		theChannel <- Message{Time: t, Record: rec, tag: &tag}
-
-		// C.free(data)
-		// C.free(unsafe.Pointer(&clength))
+		theChannel <- *msg
 	}
 
 	return output.FLB_OK
