@@ -225,6 +225,10 @@ func prepareInputCollector(multiInstance bool) (err error) {
 
 		go func(theChannel chan<- Message) {
 			err = theInput.Collect(runCtx, theChannel)
+			if err != nil {
+				fmt.Fprintf(os.Stderr,
+					"collect error: %s\n", err.Error())
+			}
 		}(theChannel)
 
 		for {
@@ -235,10 +239,6 @@ func prepareInputCollector(multiInstance bool) (err error) {
 			}
 		}
 
-		if err != nil {
-			fmt.Fprintf(os.Stderr,
-				"collect error: %s\n", err.Error())
-		}
 	}(theChannel)
 
 	return err
@@ -453,29 +453,29 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 func decodeEntry(tag string, entry []any) (*Message, error) {
 	var t time.Time
 
-	slice := reflect.ValueOf(entry)
-	if slice.Kind() != reflect.Slice || slice.Len() < 2 {
-		return nil, fmt.Errorf("unexpected entry length: %d", slice.Len())
-	}
-
-	ts := slice.Index(0).Interface()
+	ts := entry[0]
 	switch ft := ts.(type) {
 	case bigEndianTime:
 		t = time.Time(ft)
 	case []interface{}:
-		s := reflect.ValueOf(ft)
-		st := s.Index(0).Interface()
+		s, ok := ft[0].([]interface{})
+		if !ok {
+			return nil, fmt.Errorf("unable to decode record metadata")
+		}
+
+		st := s[0]
 		ty, ok := st.(bigEndianTime)
 		if !ok {
 			return nil, fmt.Errorf("unable to decode time in record metadata")
 		}
+
 		t = time.Time(ty)
 	default:
 		return nil, fmt.Errorf("unexpected entry time type: %T", entry[0])
 	}
 
-	data := slice.Index(1)
-	recVal, ok := data.Interface().(map[interface{}]interface{})
+	data := entry[1]
+	recVal, ok := data.(map[interface{}]interface{})
 	if !ok {
 		return nil, nil
 	}
