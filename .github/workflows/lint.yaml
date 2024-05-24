@@ -62,7 +62,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install C dependencies
+        run: apt install build-essential
+
       - name: golangci-lint
-        env:
-          CGO_ENABLED: 1
         uses: reviewdog/action-golangci-lint@v2
