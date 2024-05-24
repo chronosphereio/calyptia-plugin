@@ -33,7 +33,6 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	pwd, err := os.Getwd()
 	assert.NoError(t, err)
 
-	//nolint:gosec //required filesystem access to read fixture data.
 	f, err := os.Create(filepath.Join(t.TempDir(), "output.txt"))
 	assert.NoError(t, err)
 
@@ -143,18 +142,22 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 					Message        string   `json:"message"`
 					TmplOut        string   `json:"tmpl_out"`
 					MultilineSplit []string `json:"multiline_split"`
+					TimeString     string   `json:"time"`
 				}
 
+				t.Log(line)
+
+				defer cancel()
 				err := json.Unmarshal([]byte(line), &got)
 				assert.NoError(t, err)
 				assert.Equal(t, "bar", got.Foo)
 				assert.Equal(t, "hello from go-test-input-plugin", got.Message)
 				assert.Equal(t, "inside double quotes\nnew line", got.TmplOut)
 				assert.Equal(t, []string{"foo", "bar"}, got.MultilineSplit)
+				assert.Equal(t, "2024-05-21T18:41:13Z", got.TimeString)
 
 				t.Logf("took %s", time.Since(start))
 
-				cancel()
 				return
 			}
 		}

@@ -24,7 +24,6 @@ var (
 var (
 	registerWG sync.WaitGroup
 	initWG     sync.WaitGroup
-	once       sync.Once
 	runCtx     context.Context
 	runCancel  context.CancelFunc
 	theChannel chan Message

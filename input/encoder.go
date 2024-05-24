@@ -17,14 +17,17 @@
 
 package input
 
+import "C"
+
 import (
-	"C"
 	"encoding/binary"
 	"reflect"
 	"time"
 
 	"github.com/ugorji/go/codec"
 )
+
+const flbTimeBytesLen = 8
 
 type FLBEncoder struct {
 	handle *codec.MsgpackHandle
@@ -36,9 +39,9 @@ type FLBTime struct {
 }
 
 func (f FLBTime) WriteExt(i interface{}) []byte {
-	bs := make([]byte, 8)
+	bs := make([]byte, flbTimeBytesLen)
 
-	tm := i.(*FLBTime)
+	tm, _ := i.(*FLBTime)
 	utc := tm.UTC()
 
 	sec := utc.Unix()
@@ -50,7 +53,7 @@ func (f FLBTime) WriteExt(i interface{}) []byte {
 	return bs
 }
 
-func (f FLBTime) ReadExt(i interface{}, b []byte) {
+func (f FLBTime) ReadExt(interface{}, []byte) {
 	panic("unsupported")
 }
 

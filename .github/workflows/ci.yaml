@@ -35,13 +35,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version: "1.22"
 
       - name: Go mod download
         run: go mod download
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ secrets.CI_USERNAME }}
@@ -77,7 +77,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: ${{ github.event_name != 'pull_request' }}
-        uses: codecov/codecov-action@v4.4.1
+        uses: codecov/codecov-action@v4
         with:
           file: ./coverage.out
           flags: ${{ runner.os }}

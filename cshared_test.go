@@ -334,9 +334,11 @@ func TestInputCallbackLatency(t *testing.T) {
 
 type testInputCallbackInfiniteConcurrent struct{}
 
-var concurrentWait sync.WaitGroup
-var concurrentCountStart atomic.Int64
-var concurrentCountFinish atomic.Int64
+var (
+	concurrentWait        sync.WaitGroup
+	concurrentCountStart  atomic.Int64
+	concurrentCountFinish atomic.Int64
+)
 
 func (t testInputCallbackInfiniteConcurrent) Init(ctx context.Context, fbit *Fluentbit) error {
 	return nil
@@ -363,12 +365,9 @@ func (t testInputCallbackInfiniteConcurrent) Collect(ctx context.Context, ch cha
 	}
 	// for tests to correctly pass our infinite loop needs
 	// to return once the context has been finished.
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		}
-	}
+	<-ctx.Done()
+
+	return nil
 }
 
 // TestInputCallbackInfiniteConcurrent is meant to make sure we do not

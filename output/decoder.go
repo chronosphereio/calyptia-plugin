@@ -17,8 +17,9 @@
 
 package output
 
+import "C"
+
 import (
-	"C"
 	"encoding/binary"
 	"reflect"
 	"time"
@@ -41,7 +42,7 @@ func (f FLBTime) WriteExt(interface{}) []byte {
 }
 
 func (f FLBTime) ReadExt(i interface{}, b []byte) {
-	out := i.(*FLBTime)
+	out, _ := i.(*FLBTime)
 	sec := binary.BigEndian.Uint32(b)
 	usec := binary.BigEndian.Uint32(b[4:])
 	out.Time = time.Unix(int64(sec), int64(usec))
@@ -112,7 +113,7 @@ func GetRecord(dec *FLBDecoder) (ret int, ts interface{}, rec map[interface{}]in
 	}
 	data := slice.Index(1)
 
-	map_data := data.Interface().(map[interface{}]interface{})
+	md, _ := data.Interface().(map[any]any)
 
-	return 0, t, map_data
+	return 0, t, md
 }

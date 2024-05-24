@@ -1,5 +1,12 @@
 version: 2
 updates:
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "gomod: "
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -8,8 +15,8 @@ updates:
       prefix: "workflows: "
 
   - package-ecosystem: "docker"
-    directory: "/"
+    directory: "/testdata"
     schedule:
-        interval: "weekly"
+      interval: "weekly"
     commit-message:
       prefix: "dockerfile: "

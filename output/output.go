@@ -46,13 +46,13 @@ const (
 	FLB_LOG_DEBUG = C.FLB_LOG_DEBUG
 )
 
-// Local type to define a plugin definition
 type (
+	// FLBPluginProxyDef local type.
 	FLBPluginProxyDef C.struct_flb_plugin_proxy_def
 	FLBOutPlugin      C.struct_flbgo_output_plugin
 )
 
-// When the FLBPluginInit is triggered by Fluent Bit, a plugin context
+// FLBPluginRegister when the FLBPluginInit is triggered by Fluent Bit, a plugin context
 // is passed and the next step is to invoke this FLBPluginRegister() function
 // to fill the required information: type, proxy type, flags name and
 // description.
@@ -66,7 +66,7 @@ func FLBPluginRegister(def unsafe.Pointer, name, desc string) int {
 	return 0
 }
 
-// Release resources allocated by the plugin initialization
+// FLBPluginUnregister release resources allocated by the plugin initialization
 func FLBPluginUnregister(def unsafe.Pointer) {
 	p := (*FLBPluginProxyDef)(def)
 	C.free(unsafe.Pointer(p.name))
@@ -103,8 +103,7 @@ func FLBPluginGetContext(proxyCtx unsafe.Pointer) interface{} {
 }
 
 func FLBPluginGetCMetricsContext(plugin unsafe.Pointer) (*cmetrics.Context, error) {
-	ctx := C.output_get_cmt_instance(plugin)
-	cmt := unsafe.Pointer(ctx)
+	cmt := C.output_get_cmt_instance(plugin)
 	return cmetrics.NewContextFromCMTPointer(cmt)
 }
 

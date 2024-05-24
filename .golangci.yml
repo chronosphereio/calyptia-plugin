@@ -15,10 +15,11 @@ linters-settings:
   gocyclo:
     min-complexity: 25
   govet:
-    check-shadowing: true
+    shadow:
+      strict: true
   misspell:
     locale: US
-  gomnd:
+  mnd:
     ignored-numbers:
       - 2 #used for word splitting.
   gocognit:
@@ -34,16 +35,13 @@ linters:
   # inverted configuration with `enable-all` and `disable` is not scalable during updates of golangci-lint
   disable-all: true
   enable:
-    - deadcode
     - errcheck
     - gosimple
     - govet
     - ineffassign
     - staticcheck
-    - structcheck
     - typecheck
     - unused
-    - varcheck
     - bodyclose
     - dupl
     - exportloopref
@@ -57,10 +55,9 @@ linters:
     - godot
     - gofumpt
     - revive
-    - gomnd
+    - mnd
     - goprintffuncname
     - gosec
-    - ifshort
     - misspell
     - noctx
     - nolintlint
@@ -75,16 +72,16 @@ linters:
 issues:
   exclude-use-default: false
   exclude-rules:
-  - linters:
-     - funlen
-     - stylecheck
-     - gocyclo
-     - gocognit
-     - revive
-     - dupl
-     - goconst
-     - errcheck
-     - bodyclose
-     - gomnd
-     - thelper
-    path: '.*test.*.go'
+    - linters:
+        - funlen
+        - stylecheck
+        - gocyclo
+        - gocognit
+        - revive
+        - dupl
+        - goconst
+        - errcheck
+        - bodyclose
+        - mnd
+        - thelper
+      path: ".*test.*.go"
