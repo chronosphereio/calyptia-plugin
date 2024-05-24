@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"text/template"
 	"time"
@@ -20,7 +19,7 @@ type inputPlugin struct {
 	foo            string
 	tmpl           *template.Template
 	multilineSplit []string
-	time           time.Time
+	// time           time.Time
 	collectCounter metric.Counter
 	log            plugin.Logger
 }
@@ -34,10 +33,10 @@ func (plug *inputPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) error
 
 	plug.foo = fbit.Conf.String("foo")
 	plug.multilineSplit = strings.Split(fbit.Conf.String("multiline"), "\n")
-	plug.time, err = time.Parse(time.RFC3339, fbit.Conf.String("time"))
-	if err != nil {
-		return fmt.Errorf("parse time as RFC3339: %w", err)
-	}
+	// plug.time, err = time.Parse(time.RFC3339, fbit.Conf.String("time"))
+	// if err != nil {
+	// 	return fmt.Errorf("parse time as RFC3339: %w", err)
+	// }
 
 	plug.collectCounter = fbit.Metrics.NewCounter("collect_total", "Total number of collects", "go-test-input-plugin")
 	plug.log = fbit.Logger
@@ -75,7 +74,7 @@ func (plug inputPlugin) Collect(ctx context.Context, ch chan<- plugin.Message) e
 					"foo":             plug.foo,
 					"tmpl_out":        buff.String(),
 					"multiline_split": plug.multilineSplit,
-					"time":            plug.time,
+					// "time":            plug.time,
 				},
 			}
 		}

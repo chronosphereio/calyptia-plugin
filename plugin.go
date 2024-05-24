@@ -74,7 +74,8 @@ type Metrics interface {
 // Message struct to store a fluent-bit message this is collected (input) or flushed (output)
 // from a plugin implementation.
 type Message struct {
-	Time   time.Time
+	Time time.Time
+	// Record should be a map or a struct.
 	Record any
 	tag    *string
 }

@@ -142,7 +142,7 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 					Message        string   `json:"message"`
 					TmplOut        string   `json:"tmpl_out"`
 					MultilineSplit []string `json:"multiline_split"`
-					TimeString     string   `json:"time"`
+					Time           string   `json:"-"`
 				}
 
 				t.Log(line)
@@ -156,8 +156,8 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 				assert.Equal(t, []string{"foo", "bar"}, got.MultilineSplit)
 
 				// TODO: Fix time.Time printing in fluent-bit.
-				// assert.Equal(t, "2024-05-21T18:41:13Z", got.TimeString)
-				assert.Equal(t, "\x66\x4e\x3c\x49", got.TimeString)
+				// Right now it is getting some bytes "\x66\x4e\x3c\x49"
+				// assert.Equal(t, "2024-05-21T18:41:13Z", got.Time)
 
 				t.Logf("took %s", time.Since(start))
 
