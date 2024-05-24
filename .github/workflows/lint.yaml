@@ -63,4 +63,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: golangci-lint
+        env:
+          CGO_ENABLED: 1
         uses: reviewdog/action-golangci-lint@v2
