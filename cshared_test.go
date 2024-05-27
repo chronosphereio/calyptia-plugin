@@ -566,19 +566,16 @@ func TestOutputFlush(t *testing.T) {
 			defer wg.Done()
 
 			assert.Equal(t, now, msg.Time)
-			record, ok := msg.Record.(map[string]any)
-			assert.True(t, ok)
 
-			foo, ok := record["foo"].(string)
-			assert.True(t, ok, "foo type: %T", record["foo"])
+			record := assertType[map[string]any](t, msg.Record)
+
+			foo := assertType[string](t, record["foo"])
 			assert.Equal(t, "bar", foo)
 
-			bar, ok := record["bar"].(int8)
-			assert.True(t, ok, "bar type: %T", record["bar"])
+			bar := assertType[int8](t, record["bar"])
 			assert.Equal(t, 3, bar)
 
-			foobar, ok := record["foobar"].(float64)
-			assert.True(t, ok, "foobar type: %T", record["foobar"])
+			foobar := assertType[float64](t, record["foobar"])
 			assert.Equal(t, 1.337, foobar)
 
 			return nil
@@ -604,4 +601,15 @@ func TestOutputFlush(t *testing.T) {
 	wg.Add(1)
 	assert.NoError(t, pluginFlush("foobar", b))
 	wg.Wait()
+}
+
+func assertType[T any](tb testing.TB, got any) T {
+	tb.Helper()
+
+	var want T
+
+	v, ok := got.(T)
+	assert.True(tb, ok, "Expected types to be equal:\n-%T\n+%T", want, got)
+
+	return v
 }
