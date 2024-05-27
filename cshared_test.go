@@ -1,15 +1,22 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 	"unsafe"
 
-	"github.com/calyptia/plugin/output"
+	"github.com/alecthomas/assert/v2"
+	"github.com/vmihailenco/msgpack/v5"
+
+	"github.com/calyptia/plugin/metric"
 )
 
 type testPluginInputCallbackCtrlC struct{}
@@ -43,11 +50,7 @@ func TestInputCallbackCtrlC(t *testing.T) {
 	ptr := unsafe.Pointer(nil)
 
 	// prepare channel for input explicitly.
-	err := prepareInputCollector(false)
-	if err != nil {
-		t.Fail()
-		return
-	}
+	prepareInputCollector(false)
 
 	go func() {
 		FLBPluginInputCallback(&ptr, nil)
@@ -94,10 +97,7 @@ func TestInputCallbackDangle(t *testing.T) {
 	ptr := unsafe.Pointer(nil)
 
 	// prepare channel for input explicitly.
-	err := prepareInputCollector(false)
-	if err != nil {
-		t.Fail()
-	}
+	prepareInputCollector(false)
 
 	go func() {
 		t := time.NewTicker(collectInterval)
@@ -168,11 +168,7 @@ func TestInputCallbackInfinite(t *testing.T) {
 	ptr := unsafe.Pointer(nil)
 
 	// prepare channel for input explicitly.
-	err := prepareInputCollector(false)
-	if err != nil {
-		t.Fail()
-		return
-	}
+	prepareInputCollector(false)
 
 	go func() {
 		t := time.NewTicker(collectInterval)
@@ -254,11 +250,7 @@ func TestInputCallbackLatency(t *testing.T) {
 	cmsg := make(chan []byte)
 
 	// prepare channel for input explicitly.
-	err := prepareInputCollector(false)
-	if err != nil {
-		t.Fail()
-		return
-	}
+	prepareInputCollector(false)
 
 	go func() {
 		t := time.NewTicker(collectInterval)
@@ -294,30 +286,22 @@ func TestInputCallbackLatency(t *testing.T) {
 	for {
 		select {
 		case buf := <-cmsg:
-			dec := output.NewByteDecoder(buf)
-			if dec == nil {
-				t.Fatal("dec is nil")
-			}
-
+			dec := msgpack.NewDecoder(bytes.NewReader(buf))
 			for {
-				ret, timestamp, _ := output.GetRecord(dec)
-				if ret == -1 {
+				msg, err := decodeMsg(dec, "test-tag")
+				if errors.Is(err, io.EOF) {
 					break
 				}
-				if ret < 0 {
-					t.Fatalf("ret is negative: %d", ret)
+
+				if err != nil {
+					t.Fatalf("decode error: %v", err)
 				}
 
 				msgs++
 
-				ts, ok := timestamp.(output.FLBTime)
-				if !ok {
-					t.Fatal()
-				}
-
-				if time.Since(ts.Time) > time.Millisecond*5 {
+				if time.Since(msg.Time) > time.Millisecond*5 {
 					t.Errorf("latency too high: %fms",
-						float64(time.Since(ts.Time)/time.Millisecond))
+						float64(time.Since(msg.Time)/time.Millisecond))
 				}
 			}
 		case <-timeout.C:
@@ -384,10 +368,7 @@ func TestInputCallbackInfiniteConcurrent(t *testing.T) {
 	concurrentWait.Add(64)
 
 	// prepare channel for input explicitly.
-	err := prepareInputCollector(false)
-	if err != nil {
-		t.Fail()
-	}
+	prepareInputCollector(false)
 
 	go func(cstarted chan bool) {
 		ticker := time.NewTicker(time.Second * 1)
@@ -425,4 +406,207 @@ func TestInputCallbackInfiniteConcurrent(t *testing.T) {
 			concurrentCountStart.Load(),
 			concurrentCountFinish.Load())
 	}
+}
+
+type testOutputHandlerReflect struct {
+	param        string
+	flushCounter metric.Counter
+	log          Logger
+	Test         *testing.T
+	Check        func(Message) error
+}
+
+func (plug *testOutputHandlerReflect) Init(ctx context.Context, fbit *Fluentbit) error {
+	plug.flushCounter = fbit.Metrics.NewCounter("flush_total", "Total number of flushes", "gstdout")
+	plug.param = fbit.Conf.String("param")
+	plug.log = fbit.Logger
+
+	return nil
+}
+
+func (plug *testOutputHandlerReflect) Flush(ctx context.Context, ch <-chan Message) error {
+	plug.Test.Helper()
+	count := 0
+
+	for {
+		select {
+		case msg := <-ch:
+			rec := reflect.ValueOf(msg.Record)
+			if rec.Kind() != reflect.Map {
+				return fmt.Errorf("incorrect record type in flush")
+			}
+
+			if plug.Check != nil {
+				if err := plug.Check(msg); err != nil {
+					return err
+				}
+			}
+			count++
+		case <-ctx.Done():
+			if count <= 0 {
+				return fmt.Errorf("no records flushed")
+			}
+			return nil
+		}
+	}
+}
+
+type testOutputHandlerMapString struct {
+	param        string
+	flushCounter metric.Counter
+	log          Logger
+}
+
+func (plug *testOutputHandlerMapString) Init(ctx context.Context, fbit *Fluentbit) error {
+	plug.flushCounter = fbit.Metrics.NewCounter("flush_total", "Total number of flushes", "gstdout")
+	plug.param = fbit.Conf.String("param")
+	plug.log = fbit.Logger
+
+	return nil
+}
+
+func (plug *testOutputHandlerMapString) Flush(ctx context.Context, ch <-chan Message) error {
+	count := 0
+
+	for {
+		select {
+		case msg := <-ch:
+			record, ok := msg.Record.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("unable to convert record to map[string]")
+			}
+			for _, value := range record {
+				_, ok := value.(string)
+				if !ok {
+					return fmt.Errorf("unable to convert value")
+				}
+			}
+			count++
+		case <-ctx.Done():
+			if count <= 0 {
+				return fmt.Errorf("no records flushed")
+			}
+			return nil
+		}
+	}
+}
+
+// TestOutput is a simple output test. It also shows which format of records
+// we currently support and how they should be handled. Feel free to use this
+// code as an example of how to implement the Flush receive for output plugins.
+//
+// At the moment all Message.Records will be sent as a `map[string]interface{}`.
+// Older plugins will have to do as testOutputHandlerMapString.Flush does
+// and cast the actual value as a string.
+func TestOutputSimulated(t *testing.T) {
+	var wg sync.WaitGroup
+	ctxt, cancel := context.WithCancel(context.Background())
+	ch := make(chan Message)
+	tag := "tag"
+
+	outputReflect := testOutputHandlerReflect{Test: t}
+
+	wg.Add(1)
+	go func(ctxt context.Context, wg *sync.WaitGroup, ch <-chan Message) {
+		err := outputReflect.Flush(ctxt, ch)
+		if err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}(ctxt, &wg, ch)
+
+	ch <- Message{
+		Time: time.Now(),
+		Record: map[string]interface{}{
+			"foo": "bar",
+			"bar": "1",
+		},
+		tag: &tag,
+	}
+
+	cancel()
+	wg.Wait()
+	wg = sync.WaitGroup{}
+	ctxt, cancel = context.WithCancel(context.Background())
+
+	outputMapString := testOutputHandlerMapString{}
+
+	wg.Add(1)
+	go func(ctxt context.Context, wg *sync.WaitGroup, ch <-chan Message) {
+		err := outputMapString.Flush(ctxt, ch)
+		if err != nil {
+			t.Error(err)
+			t.Fail()
+		}
+		wg.Done()
+	}(ctxt, &wg, ch)
+
+	ch <- Message{
+		Time: time.Now(),
+		Record: map[string]interface{}{
+			"foo":    "bar",
+			"foobar": "1",
+		},
+		tag: &tag,
+	}
+
+	cancel()
+	wg.Wait()
+	close(ch)
+}
+
+func TestOutputFlush(t *testing.T) {
+	var wg sync.WaitGroup
+
+	now := time.Now().UTC()
+
+	out := testOutputHandlerReflect{
+		Test: t,
+		Check: func(msg Message) error {
+			wg.Done()
+
+			if !msg.Time.Equal(now) {
+				return fmt.Errorf("unexpected time: got %v, expected %v", msg.Time, now)
+			}
+
+			record, ok := msg.Record.(map[string]any)
+			if !ok {
+				return fmt.Errorf("unexpected record type: got %T, expected map[string]any", msg.Record)
+			}
+
+			if foo, ok := record["foo"].(string); !ok || foo != "bar" {
+				return fmt.Errorf("unexpected foo: got %#v, expected bar", record["foo"])
+			}
+
+			if bar, ok := record["bar"].(int64); !ok || bar != 0 {
+				return fmt.Errorf("unexpected bar: got %#v, expected 0", record["bar"])
+			}
+
+			if foobar, ok := record["foobar"].(float64); !ok || foobar != 1.337 {
+				return fmt.Errorf("unexpected foobar: got %#v, expected 1.337", record["foobar"])
+			}
+
+			return nil
+		},
+	}
+	_ = prepareOutputFlush(&out)
+
+	msg := Message{
+		Time: now,
+		Record: map[string]any{
+			"foo":    "bar",
+			"bar":    0,
+			"foobar": 1.337,
+		},
+	}
+
+	b, err := msgpack.Marshal([]any{
+		&EventTime{msg.Time},
+		msg.Record,
+	})
+	assert.NoError(t, err)
+
+	wg.Add(1)
+	assert.NoError(t, pluginFlush("foobar", b))
+	wg.Wait()
 }

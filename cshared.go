@@ -194,11 +194,18 @@ func testFLBPluginInputCallback() ([]byte, error) {
 	return C.GoBytes(data, C.int(csize)), nil
 }
 
+// prepareOutputFlush is a testing utility.
+func prepareOutputFlush(output OutputPlugin) error {
+	theOutput = output
+	FLBPluginOutputPreRun(0)
+	return nil
+}
+
 // Lock used to synchronize access to theInput variable.
 var theInputLock sync.Mutex
 
 // prepareInputCollector is meant to prepare resources for input collectors
-func prepareInputCollector(multiInstance bool) (err error) {
+func prepareInputCollector(multiInstance bool) {
 	runCtx, runCancel = context.WithCancel(context.Background())
 	if !multiInstance {
 		theChannel = make(chan Message, maxBufferedMessages)
@@ -218,15 +225,16 @@ func prepareInputCollector(multiInstance bool) (err error) {
 		}
 
 		go func(theChannel chan<- Message) {
-			err = theInput.Collect(runCtx, theChannel)
+			err := theInput.Collect(runCtx, theChannel)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "collect error: %v\n", err)
+			}
 		}(theChannel)
 
 		<-runCtx.Done()
 
 		log.Printf("goroutine will be stopping: name=%q\n", theName)
 	}(theChannel)
-
-	return err
 }
 
 // FLBPluginInputPreRun this method gets invoked by the fluent-bit runtime, once the plugin has been
@@ -236,11 +244,7 @@ func prepareInputCollector(multiInstance bool) (err error) {
 func FLBPluginInputPreRun(useHotReload C.int) int {
 	registerWG.Wait()
 
-	err := prepareInputCollector(true)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "run: %s\n", err)
-		return input.FLB_ERROR
-	}
+	prepareInputCollector(true)
 
 	return input.FLB_OK
 }
@@ -271,10 +275,7 @@ func FLBPluginInputPause() {
 //
 //export FLBPluginInputResume
 func FLBPluginInputResume() {
-	err := prepareInputCollector(true)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "run: %s\n", err)
-	}
+	prepareInputCollector(true)
 }
 
 // FLBPluginOutputPreExit this method gets invoked by the fluent-bit runtime, once the plugin has been
@@ -421,58 +422,89 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 	}
 
 	in := C.GoBytes(data, clength)
-	dec := msgpack.NewDecoder(bytes.NewReader(in))
+	tag := C.GoString(ctag)
+	if err := pluginFlush(tag, in); err != nil {
+		fmt.Fprintf(os.Stderr, "flush: %s\n", err)
+		return output.FLB_ERROR
+	}
+
+	return output.FLB_OK
+}
+
+func pluginFlush(tag string, b []byte) error {
+	dec := msgpack.NewDecoder(bytes.NewReader(b))
 	for {
 		select {
 		case <-runCtx.Done():
 			err := runCtx.Err()
 			if err != nil && !errors.Is(err, context.Canceled) {
 				fmt.Fprintf(os.Stderr, "run: %s\n", err)
-				return output.FLB_ERROR
+				return fmt.Errorf("run: %w", err)
 			}
 
-			return output.FLB_OK
+			return nil
 		default:
 		}
 
-		var entry []msgpack.RawMessage
-		err := dec.Decode(&entry)
+		msg, err := decodeMsg(dec, tag)
 		if errors.Is(err, io.EOF) {
-			break
+			return nil
 		}
 
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "msgpack unmarshal: %v\n", err)
-			return output.FLB_ERROR
+			return err
 		}
 
-		if l := len(entry); l < 2 {
-			fmt.Fprintf(os.Stderr, "msgpack unmarshal: expected 2 elements, got %d\n", l)
-			return output.FLB_ERROR
-		}
+		theChannel <- msg
+	}
+}
 
-		eventTime := &EventTime{}
-		if err := msgpack.Unmarshal(entry[0], &eventTime); err != nil {
-			fmt.Fprintf(os.Stderr, "msgpack unmarshal event time: %s\n", err)
-			return output.FLB_ERROR
-		}
+// decodeMsg should be called with an already initialized decoder.
+func decodeMsg(dec *msgpack.Decoder, tag string) (Message, error) {
+	var out Message
 
-		var record map[string]any
-		if err := msgpack.Unmarshal(entry[1], &record); err != nil {
-			fmt.Fprintf(os.Stderr, "msgpack unmarshal event record: %s\n", err)
-			return output.FLB_ERROR
-		}
-
-		tag := C.GoString(ctag)
-		// C.free(unsafe.Pointer(ctag))
-
-		theChannel <- Message{Time: eventTime.Time, Record: record, tag: &tag}
-
-		// C.free(data)
-		// C.free(unsafe.Pointer(&clength))
+	var entry []msgpack.RawMessage
+	err := dec.Decode(&entry)
+	if errors.Is(err, io.EOF) {
+		return out, err
 	}
 
-	return output.FLB_OK
+	if err != nil {
+		return out, fmt.Errorf("msgpack unmarshal: %w", err)
+	}
+
+	if l := len(entry); l < 2 {
+		return out, fmt.Errorf("msgpack unmarshal: expected 2 elements, got %d", l)
+	}
+
+	eventTime := &EventTime{}
+	if err := msgpack.Unmarshal(entry[0], &eventTime); err != nil {
+		var eventWithMetadata []msgpack.RawMessage // for Fluent Bit V2 metadata type of format
+		if err := msgpack.Unmarshal(entry[0], &eventWithMetadata); err != nil {
+			return out, fmt.Errorf("msgpack unmarshal event with metadata: %w", err)
+		}
+
+		if len(eventWithMetadata) < 1 {
+			return out, fmt.Errorf("msgpack unmarshal event time with metadata: expected 1 element, got %d", len(eventWithMetadata))
+		}
+
+		if err := msgpack.Unmarshal(eventWithMetadata[0], &eventTime); err != nil {
+			return out, fmt.Errorf("msgpack unmarshal event time with metadata: %w", err)
+		}
+
+		return out, fmt.Errorf("msgpack unmarshal event time: %w", err)
+	}
+
+	var record map[string]any
+	if err := msgpack.Unmarshal(entry[1], &record); err != nil {
+		return out, fmt.Errorf("msgpack unmarshal event record: %w", err)
+	}
+
+	out.Time = eventTime.Time
+	out.Record = record
+	out.tag = &tag
+
+	return out, nil
 }
 
 // FLBPluginExit method is invoked once the plugin instance is exited from the fluent-bit context.
