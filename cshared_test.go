@@ -413,7 +413,7 @@ type testOutputHandlerReflect struct {
 	flushCounter metric.Counter
 	log          Logger
 	Test         *testing.T
-	Check        func(Message) error
+	Check        func(t *testing.T, msg Message) error
 }
 
 func (plug *testOutputHandlerReflect) Init(ctx context.Context, fbit *Fluentbit) error {
@@ -437,7 +437,7 @@ func (plug *testOutputHandlerReflect) Flush(ctx context.Context, ch <-chan Messa
 			}
 
 			if plug.Check != nil {
-				if err := plug.Check(msg); err != nil {
+				if err := plug.Check(plug.Test, msg); err != nil {
 					return err
 				}
 			}
@@ -562,29 +562,24 @@ func TestOutputFlush(t *testing.T) {
 
 	out := testOutputHandlerReflect{
 		Test: t,
-		Check: func(msg Message) error {
-			wg.Done()
+		Check: func(t *testing.T, msg Message) error {
+			defer wg.Done()
 
-			if !msg.Time.Equal(now) {
-				return fmt.Errorf("unexpected time: got %v, expected %v", msg.Time, now)
-			}
-
+			assert.Equal(t, now, msg.Time)
 			record, ok := msg.Record.(map[string]any)
-			if !ok {
-				return fmt.Errorf("unexpected record type: got %T, expected map[string]any", msg.Record)
-			}
+			assert.True(t, ok)
 
-			if foo, ok := record["foo"].(string); !ok || foo != "bar" {
-				return fmt.Errorf("unexpected foo: got %#v, expected bar", record["foo"])
-			}
+			foo, ok := record["foo"].(string)
+			assert.True(t, ok, "foo type: %T", record["foo"])
+			assert.Equal(t, "bar", foo)
 
-			if bar, ok := record["bar"].(int64); !ok || bar != 0 {
-				return fmt.Errorf("unexpected bar: got %#v, expected 0", record["bar"])
-			}
+			bar, ok := record["bar"].(int8)
+			assert.True(t, ok, "bar type: %T", record["bar"])
+			assert.Equal(t, 3, bar)
 
-			if foobar, ok := record["foobar"].(float64); !ok || foobar != 1.337 {
-				return fmt.Errorf("unexpected foobar: got %#v, expected 1.337", record["foobar"])
-			}
+			foobar, ok := record["foobar"].(float64)
+			assert.True(t, ok, "foobar type: %T", record["foobar"])
+			assert.Equal(t, 1.337, foobar)
 
 			return nil
 		},
@@ -595,7 +590,7 @@ func TestOutputFlush(t *testing.T) {
 		Time: now,
 		Record: map[string]any{
 			"foo":    "bar",
-			"bar":    0,
+			"bar":    3,
 			"foobar": 1.337,
 		},
 	}

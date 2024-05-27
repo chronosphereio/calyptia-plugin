@@ -500,7 +500,7 @@ func decodeMsg(dec *msgpack.Decoder, tag string) (Message, error) {
 		return out, fmt.Errorf("msgpack unmarshal event record: %w", err)
 	}
 
-	out.Time = eventTime.Time
+	out.Time = eventTime.Time.UTC()
 	out.Record = record
 	out.tag = &tag
 
