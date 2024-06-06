@@ -13,7 +13,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -21,7 +20,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/ugorji/go/codec"
+	"github.com/vmihailenco/msgpack/v5"
 
 	cmetrics "github.com/calyptia/cmetrics-go"
 	"github.com/calyptia/plugin/input"
@@ -44,6 +43,8 @@ var (
 	maxBufferedMessages = defaultMaxBufferedMessages
 )
 
+// FLBPluginPreRegister -
+//
 //export FLBPluginPreRegister
 func FLBPluginPreRegister(hotReloading C.int) int {
 	if hotReloading == C.int(1) {
@@ -175,7 +176,6 @@ func flbPluginReset() {
 		}
 	}()
 
-	once = sync.Once{}
 	close(theChannel)
 	theInput = nil
 }
@@ -194,11 +194,18 @@ func testFLBPluginInputCallback() ([]byte, error) {
 	return C.GoBytes(data, C.int(csize)), nil
 }
 
+// prepareOutputFlush is a testing utility.
+func prepareOutputFlush(output OutputPlugin) error {
+	theOutput = output
+	FLBPluginOutputPreRun(0)
+	return nil
+}
+
 // Lock used to synchronize access to theInput variable.
 var theInputLock sync.Mutex
 
 // prepareInputCollector is meant to prepare resources for input collectors
-func prepareInputCollector(multiInstance bool) (err error) {
+func prepareInputCollector(multiInstance bool) {
 	runCtx, runCancel = context.WithCancel(context.Background())
 	if !multiInstance {
 		theChannel = make(chan Message, maxBufferedMessages)
@@ -218,40 +225,26 @@ func prepareInputCollector(multiInstance bool) (err error) {
 		}
 
 		go func(theChannel chan<- Message) {
-			err = theInput.Collect(runCtx, theChannel)
+			err := theInput.Collect(runCtx, theChannel)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "collect error: %v\n", err)
+			}
 		}(theChannel)
 
-		for {
-			select {
-			case <-runCtx.Done():
-				log.Printf("goroutine will be stopping: name=%q\n", theName)
-				return
-			}
-		}
+		<-runCtx.Done()
 
-		if err != nil {
-			fmt.Fprintf(os.Stderr,
-				"collect error: %s\n", err.Error())
-		}
+		log.Printf("goroutine will be stopping: name=%q\n", theName)
 	}(theChannel)
-
-	return err
 }
 
 // FLBPluginInputPreRun this method gets invoked by the fluent-bit runtime, once the plugin has been
-// initialised, the plugin invoked only once before executing the input callbacks.
+// initialized, the plugin invoked only once before executing the input callbacks.
 //
 //export FLBPluginInputPreRun
 func FLBPluginInputPreRun(useHotReload C.int) int {
 	registerWG.Wait()
 
-	var err error
-	err = prepareInputCollector(true)
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "run: %s\n", err)
-		return input.FLB_ERROR
-	}
+	prepareInputCollector(true)
 
 	return input.FLB_OK
 }
@@ -282,12 +275,7 @@ func FLBPluginInputPause() {
 //
 //export FLBPluginInputResume
 func FLBPluginInputResume() {
-	var err error
-	err = prepareInputCollector(true)
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "run: %s\n", err)
-	}
+	prepareInputCollector(true)
 }
 
 // FLBPluginOutputPreExit this method gets invoked by the fluent-bit runtime, once the plugin has been
@@ -311,6 +299,8 @@ func FLBPluginOutputPreExit() {
 	}
 }
 
+// FLBPluginOutputPreRun -
+//
 //export FLBPluginOutputPreRun
 func FLBPluginOutputPreRun(useHotReload C.int) int {
 	registerWG.Wait()
@@ -323,14 +313,9 @@ func FLBPluginOutputPreRun(useHotReload C.int) int {
 			err = theOutput.Flush(runCtx, theChannel)
 		}(runCtx)
 
-		for {
-			select {
-			case <-runCtx.Done():
-				log.Printf("goroutine will be stopping: name=%q\n", theName)
-				return
-			}
-		}
+		<-runCtx.Done()
 
+		log.Printf("goroutine will be stopping: name=%q\n", theName)
 	}(runCtx)
 
 	if err != nil {
@@ -342,7 +327,7 @@ func FLBPluginOutputPreRun(useHotReload C.int) int {
 }
 
 // FLBPluginInputCallback this method gets invoked by the fluent-bit runtime, once the plugin has been
-// initialised, the plugin implementation is responsible for handling the incoming data and the context
+// initialized, the plugin implementation is responsible for handling the incoming data and the context
 // that gets past, for long-living collectors the plugin itself should keep a running thread and fluent-bit
 // will not execute further callbacks.
 //
@@ -367,12 +352,12 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 				return input.FLB_ERROR
 			}
 
-			t := input.FLBTime{Time: msg.Time}
-			b, err := input.NewEncoder().Encode([]any{t, msg.Record})
+			b, err := msgpack.Marshal([]any{&EventTime{msg.Time}, msg.Record})
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "encode: %s\n", err)
+				fmt.Fprintf(os.Stderr, "msgpack marshal: %s\n", err)
 				return input.FLB_ERROR
 			}
+
 			buf.Grow(len(b))
 			buf.Write(b)
 		case <-runCtx.Done():
@@ -415,7 +400,6 @@ func FLBPluginInputCleanupCallback(data unsafe.Pointer) int {
 // plugin in the pipeline, a data pointer, length and a tag are passed to the plugin interface implementation.
 //
 //export FLBPluginFlush
-//nolint:funlen //ignore length requirement for this function
 func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 	initWG.Wait()
 
@@ -438,102 +422,89 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 	}
 
 	in := C.GoBytes(data, clength)
-	h := &codec.MsgpackHandle{}
-	err = h.SetBytesExt(reflect.TypeOf(bigEndianTime{}), 0, &bigEndianTime{})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "big endian time bytes ext: %v\n", err)
+	tag := C.GoString(ctag)
+	if err := pluginFlush(tag, in); err != nil {
+		fmt.Fprintf(os.Stderr, "flush: %s\n", err)
 		return output.FLB_ERROR
 	}
 
-	dec := codec.NewDecoderBytes(in, h)
+	return output.FLB_OK
+}
 
+func pluginFlush(tag string, b []byte) error {
+	dec := msgpack.NewDecoder(bytes.NewReader(b))
 	for {
 		select {
 		case <-runCtx.Done():
 			err := runCtx.Err()
 			if err != nil && !errors.Is(err, context.Canceled) {
 				fmt.Fprintf(os.Stderr, "run: %s\n", err)
-				return output.FLB_ERROR
+				return fmt.Errorf("run: %w", err)
 			}
 
-			return output.FLB_OK
+			return nil
 		default:
 		}
 
-		var entry []any
-		err := dec.Decode(&entry)
+		msg, err := decodeMsg(dec, tag)
 		if errors.Is(err, io.EOF) {
-			break
+			return nil
 		}
 
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "decode: %s\n", err)
-			return output.FLB_ERROR
+			return err
 		}
 
-		slice := reflect.ValueOf(entry)
-		if slice.Kind() != reflect.Slice || slice.Len() < 2 {
-			fmt.Fprintf(os.Stderr, "unexpected entry length: %d\n", slice.Len())
-			return output.FLB_ERROR
-		}
+		theChannel <- msg
+	}
+}
 
-		var t time.Time
-		ts := slice.Index(0).Interface()
-		switch ft := ts.(type) {
-		case bigEndianTime:
-			t = time.Time(ft)
-		case []interface{}:
-			s := reflect.ValueOf(ft)
-			st := s.Index(0).Interface()
-			ty := st.(bigEndianTime)
-			t = time.Time(ty)
-		default:
-			fmt.Fprintf(os.Stderr, "unexpected entry time type: %T\n", entry[0])
-			return output.FLB_ERROR
-		}
+// decodeMsg should be called with an already initialized decoder.
+func decodeMsg(dec *msgpack.Decoder, tag string) (Message, error) {
+	var out Message
 
-		data := slice.Index(1)
-		recVal := data.Interface().(map[interface{}]interface{})
-
-		var rec map[string]string
-		if d := len(recVal); d != 0 {
-			rec = make(map[string]string, d)
-			for k, v := range recVal {
-				key, ok := k.(string)
-				if !ok {
-					fmt.Fprintf(os.Stderr, "unexpected record key type: %T\n", k)
-					return output.FLB_ERROR
-				}
-
-				var val string
-				switch tv := v.(type) {
-				case []uint8:
-					val = string(tv)
-				case uint64:
-					val = strconv.FormatUint(tv, 10)
-				case int64:
-					val = strconv.FormatInt(tv, 10)
-				case bool:
-					val = strconv.FormatBool(tv)
-				default:
-					fmt.Fprintf(os.Stderr, "unexpected record value type: %T\n", v)
-					return output.FLB_ERROR
-				}
-
-				rec[key] = val
-			}
-		}
-
-		tag := C.GoString(ctag)
-		// C.free(unsafe.Pointer(ctag))
-
-		theChannel <- Message{Time: t, Record: rec, tag: &tag}
-
-		// C.free(data)
-		// C.free(unsafe.Pointer(&clength))
+	var entry []msgpack.RawMessage
+	err := dec.Decode(&entry)
+	if errors.Is(err, io.EOF) {
+		return out, err
 	}
 
-	return output.FLB_OK
+	if err != nil {
+		return out, fmt.Errorf("msgpack unmarshal: %w", err)
+	}
+
+	if l := len(entry); l < 2 {
+		return out, fmt.Errorf("msgpack unmarshal: expected 2 elements, got %d", l)
+	}
+
+	eventTime := &EventTime{}
+	if err := msgpack.Unmarshal(entry[0], &eventTime); err != nil {
+		var eventWithMetadata []msgpack.RawMessage // for Fluent Bit V2 metadata type of format
+		if err := msgpack.Unmarshal(entry[0], &eventWithMetadata); err != nil {
+			return out, fmt.Errorf("msgpack unmarshal event with metadata: %w", err)
+		}
+
+		if len(eventWithMetadata) < 1 {
+			return out, fmt.Errorf("msgpack unmarshal event time with metadata: expected 1 element, got %d", len(eventWithMetadata))
+		}
+
+		if err := msgpack.Unmarshal(eventWithMetadata[0], &eventTime); err != nil {
+			return out, fmt.Errorf("msgpack unmarshal event time with metadata: %w", err)
+		}
+
+		return out, fmt.Errorf("msgpack unmarshal event time: %w", err)
+	}
+
+	var record map[string]any
+	if err := msgpack.Unmarshal(entry[1], &record); err != nil {
+		return out, fmt.Errorf("msgpack unmarshal event record: %w", err)
+	}
+
+	out.Time = eventTime.Time.UTC()
+	out.Record = record
+	out.tag = &tag
+
+	return out, nil
 }
 
 // FLBPluginExit method is invoked once the plugin instance is exited from the fluent-bit context.

@@ -21,4 +21,4 @@ func (c *Counter) Add(delta float64, labelValues ...string) {
 
 type noopCounter struct{}
 
-func (n noopCounter) Add(delta float64, labelValues ...string) {}
+func (n noopCounter) Add(float64, ...string) {}

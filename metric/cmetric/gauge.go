@@ -28,5 +28,5 @@ func (c *Gauge) Set(value float64, labelValues ...string) {
 
 type noopGauge struct{}
 
-func (n noopGauge) Add(delta float64, labelValues ...string) {}
-func (n noopGauge) Set(value float64, labelValues ...string) {}
+func (n noopGauge) Add(float64, ...string) {}
+func (n noopGauge) Set(float64, ...string) {}
