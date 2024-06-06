@@ -5,7 +5,7 @@ go 1.22.3
 replace github.com/imdario/mergo => github.com/imdario/mergo v0.3.16
 
 require (
-	github.com/alecthomas/assert/v2 v2.9.0
+	github.com/alecthomas/assert/v2 v2.10.0
 	github.com/calyptia/cmetrics-go v0.1.7
 	github.com/calyptia/go-fluentbit-config/v2 v2.2.0
 	github.com/ory/dockertest/v3 v3.10.0
