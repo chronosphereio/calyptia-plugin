@@ -1,11 +1,11 @@
 module github.com/calyptia/plugin
 
-go 1.22.3
+go 1.22.4
 
 replace github.com/imdario/mergo => github.com/imdario/mergo v0.3.16
 
 require (
-	github.com/alecthomas/assert/v2 v2.9.0
+	github.com/alecthomas/assert/v2 v2.10.0
 	github.com/calyptia/cmetrics-go v0.1.7
 	github.com/calyptia/go-fluentbit-config/v2 v2.2.0
 	github.com/ory/dockertest/v3 v3.10.0
@@ -23,8 +23,8 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/containerd/continuity v0.4.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/docker/cli v26.1.3+incompatible // indirect
-	github.com/docker/docker v26.1.3+incompatible // indirect
+	github.com/docker/cli v26.1.4+incompatible // indirect
+	github.com/docker/docker v26.1.4+incompatible // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
@@ -43,8 +43,8 @@ require (
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
-	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842 // indirect
-	golang.org/x/sys v0.20.0 // indirect
+	golang.org/x/exp v0.0.0-20240604190554-fc45aab8b7f8 // indirect
+	golang.org/x/sys v0.21.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
