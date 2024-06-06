@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - run: |
           CMETRICS_VERSION=$(sed -n 's/^ARG CMETRICS_VERSION=\(.*\)/\1/p' testdata/Dockerfile)
@@ -98,10 +100,10 @@ jobs:
 
       - name: Run GoReleaser
         if: ${{ github.event_name != 'pull_request' }}
-        uses: goreleaser/goreleaser-action@v5
+        uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
-          args: release --rm-dist
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.CI_PAT }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
