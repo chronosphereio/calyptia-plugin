@@ -78,7 +78,7 @@ jobs:
                 ./output/
 
       - name: Upload coverage to Codecov
-        if: ${{ github.event_name != 'pull_request' }}
+        if: startsWith(github.ref, 'refs/tags/')
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.out
@@ -86,12 +86,12 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Install Syft for sboms
-        if: ${{ github.event_name != 'pull_request' }}
+        if: startsWith(github.ref, 'refs/tags/')
         run: curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
         shell: bash
 
       - name: Import GPG key
-        if: ${{ github.event_name != 'pull_request' }}
+        if: startsWith(github.ref, 'refs/tags/')
         id: import_gpg
         uses: crazy-max/ghaction-import-gpg@v6
         with:
@@ -99,7 +99,7 @@ jobs:
           passphrase: ${{ secrets.CALYPTIA_GPG_KEY_PASSPHRASE }}
 
       - name: Run GoReleaser
-        if: ${{ github.event_name != 'pull_request' }}
+        if: startsWith(github.ref, 'refs/tags/')
         uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
