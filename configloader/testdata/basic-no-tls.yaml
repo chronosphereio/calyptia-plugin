@@ -1,9 +1,10 @@
-HTTP_Server: "On"
-HTTP_Listen: 0.0.0.0
-HTTP_PORT: 2020
-Log_Level: debug
-plugins_file: /opt/calyptia-fluent-bit/etc/enterprise_plugins.conf
-Parsers_File: /config/parsers.conf
+service:
+  HTTP_Server: "On"
+  HTTP_Listen: 0.0.0.0
+  HTTP_PORT: 2020
+  Log_Level: debug
+  plugins_file: /opt/calyptia-fluent-bit/etc/enterprise_plugins.conf
+  Parsers_File: /config/parsers.conf
 customs:
   - name: calyptia
     calyptia_tls: "off"
