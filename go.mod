@@ -7,7 +7,7 @@ replace github.com/imdario/mergo => github.com/imdario/mergo v0.3.16
 require (
 	github.com/alecthomas/assert/v2 v2.11.0
 	github.com/calyptia/cmetrics-go v0.1.7
-	github.com/calyptia/go-fluentbit-config/v2 v2.4.0
+	github.com/calyptia/go-fluentbit-config/v2 v2.4.1
 	github.com/ory/dockertest/v3 v3.10.0
 	github.com/stretchr/testify v1.9.0
 	github.com/ugorji/go/codec v1.2.12
