@@ -79,7 +79,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: startsWith(github.ref, 'refs/tags/')
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           file: ./coverage.out
           flags: ${{ runner.os }}
