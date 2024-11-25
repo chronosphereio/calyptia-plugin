@@ -9,7 +9,7 @@ require (
 	github.com/calyptia/cmetrics-go v0.1.7
 	github.com/calyptia/go-fluentbit-config/v2 v2.5.0
 	github.com/ory/dockertest/v3 v3.11.0
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	github.com/ugorji/go/codec v1.2.12
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 )
