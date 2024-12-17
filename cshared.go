@@ -47,9 +47,7 @@ var (
 //
 //export FLBPluginPreRegister
 func FLBPluginPreRegister(hotReloading C.int) int {
-	if hotReloading == C.int(1) {
-		registerWG.Add(1)
-	}
+	registerWG.Add(1)
 
 	return input.FLB_OK
 }

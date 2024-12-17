@@ -30,7 +30,6 @@ var (
 )
 
 func init() {
-	registerWG.Add(1)
 	theChannel = nil
 }
 
