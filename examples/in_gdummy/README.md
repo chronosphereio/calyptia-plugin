@@ -31,7 +31,7 @@ description:
 ```go
 //export FLBPluginRegister
 func FLBPluginRegister(def unsafe.Pointer) int {
-	return input.FLBPluginRegister(def, "gdummy", "dummy Go!")
+ return input.FLBPluginRegister(def, "gdummy", "dummy Go!")
 }
 ```
 
@@ -44,7 +44,7 @@ so the plugin can ask for configuration parameters or do any other internal chec
 ```go
 //export FLBPluginInit
 func FLBPluginInit(ctx unsafe.Pointer) int {
-	return input.FLB_OK
+ return input.FLB_OK
 }
 ```
 
@@ -61,20 +61,20 @@ The callback will send a raw buffer of msgpack data with it proper bytes length 
 ```go
 //export FLBPluginInputCallback
 func FLBPluginInputCallback(data *unsafe.Pointer, size *C.size_t) int {
-	now := time.Now()
-	// To handle nanosecond precision on Golang input plugin, you must wrap up time instances with input.FLBTime type.
-	flb_time := input.FLBTime{now}
-	message := map[string]string{"message": "dummy"}
+ now := time.Now()
+ // To handle nanosecond precision on Golang input plugin, you must wrap up time instances with input.FLBTime type.
+ flb_time := input.FLBTime{now}
+ message := map[string]string{"message": "dummy"}
 
-	entry := []interface{}{flb_time, message}
+ entry := []interface{}{flb_time, message}
 
-	// Some encoding logs to msgpack payload stuffs.
-	// It needs to Wait for some period on Golang input plugin side, until the new records are emitted.
+ // Some encoding logs to msgpack payload stuffs.
+ // It needs to Wait for some period on Golang input plugin side, until the new records are emitted.
 
-	length := len(packed)
-	*data = C.CBytes(packed)
-	*size = C.size_t(len(packed))
-	return input.FLB_OK
+ length := len(packed)
+ *data = C.CBytes(packed)
+ *size = C.size_t(len(packed))
+ return input.FLB_OK
 }
 ```
 
@@ -87,9 +87,9 @@ This callback is mainly used for cleaning up resources not for the first argumen
 ```go
 //export FLBPluginInputCleanupCallback
 func FLBPluginInputCleanupCallback(data unsafe.Pointer) int {
-	// Some sort of cleaning up resources
+ // Some sort of cleaning up resources
 
-	return input.FLB_OK
+ return input.FLB_OK
 }
 ```
 
@@ -105,7 +105,6 @@ When done, there are three returning values available:
 | FLB\_ERROR    | An internal error have ocurred, the plugin will not handle the set of records/data again. |
 | FLB\_RETRY    | A recoverable error have ocurred, the engine can try to flush the records/data later.|
 
-
 ## Plugin Exit
 
 When Fluent Bit will stop using the instance of the plugin, it will trigger the exit callback. e.g:
@@ -113,6 +112,6 @@ When Fluent Bit will stop using the instance of the plugin, it will trigger the 
 ```go
 //export FLBPluginExit
 func FLBPluginExit() int {
-	return input.FLB_OK
+ return input.FLB_OK
 }
 ```
