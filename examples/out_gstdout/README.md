@@ -18,7 +18,7 @@ When Fluent Bit loads a Golang plugin, it lookup and load the registration callb
 ```go
 //export FLBPluginRegister
 func FLBPluginRegister(ctx unsafe.Pointer) int {
-	return output.FLBPluginRegister(ctx, "gstdout", "Stdout GO!")
+ return output.FLBPluginRegister(ctx, "gstdout", "Stdout GO!")
 }
 ```
 
@@ -31,7 +31,7 @@ Before the engine starts, it initialize all plugins that were requested to start
 ```go
 //export FLBPluginInit
 func FLBPluginInit(ctx unsafe.Pointer) int {
-	return output.FLB_OK
+ return output.FLB_OK
 }
 ```
 
@@ -67,6 +67,6 @@ When Fluent Bit will stop using the instance of the plugin, it will trigger the 
 ```go
 //export FLBPluginExit
 func FLBPluginExit() int {
-	return output.FLB_OK
+ return output.FLB_OK
 }
 ```
