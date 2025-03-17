@@ -1,7 +1,7 @@
-[![Go Reference](https://pkg.go.dev/badge/github.com/calyptia/plugin.svg)](https://pkg.go.dev/github.com/calyptia/plugin)
-[![codecov](https://codecov.io/gh/calyptia/plugin/branch/main/graph/badge.svg?token=VP4Y8DAHGZ)](https://codecov.io/gh/calyptia/plugin)
-
 # Fluent-bit plugin
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/calyptia/plugin.svg)](https://pkg.go.dev/github.com/calyptia/plugin)
+[![codecov](https://codecov.io/gh/calyptia/plugin/branch/main/graph/badge.svg?token=VP4Y8DAHGZ)](https://app.codecov.io/gh/chronosphereio/calyptia-plugin)
 
 This repository contains the required Golang interfaces and data types
 required to create [Fluent bit](https://fluentbit.io) Golang plugins.
