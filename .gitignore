@@ -353,3 +353,5 @@ $RECYCLE.BIN/
 # End of https://www.toptal.com/developers/gitignore/api/go,macos,linux,windows,executable,git,visualstudiocode,goland,vim,c++,c
 
 dist/
+
+codecov*
