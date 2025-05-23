@@ -25,11 +25,16 @@
 struct flb_api {
     char *_;
     char *(*input_get_property) (char *, void *);
+
     void *__;
     void *(*input_get_cmt_instance) (void *);
+
     void (*log_print) (int, const char*, int, const char*, ...);
     int (*input_log_check) (void *, int);
-    int ___;
+    void *___;
+
+    char *____;
+    int *______;
 };
 
 struct flb_plugin_proxy_context {

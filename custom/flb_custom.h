@@ -1,8 +1,8 @@
 /* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 
-/*  Fluent Bit Go!
- *  ==============
- *  Copyright (C) 2015-2017 Treasure Data Inc.
+/*  Fluent Bit
+ *  ==========
+ *  Copyright (C) 2015-2024 The Fluent Bit Authors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -17,22 +17,22 @@
  *  limitations under the License.
  */
 
-#ifndef FLBGO_OUTPUT_H
-#define FLBGO_OUTPUT_H
+#ifndef FLBGO_CUSTOM_H
+#define FLBGO_CUSTOM_H
 
 struct flb_api {
-    char *(*output_get_property) (char *, void *);
     char *_;
+    char *__;
 
-    void *(*output_get_cmt_instance) (void *);
-    void *__;
+    void *___;
+    void *____;
 
     void (*log_print) (int, const char*, int, const char*, ...);
-    int *___;
-    int (*output_log_check) (void *, int);
-
-    char *____;
     int *_____;
+    int *______;
+
+    char *(*custom_get_property) (char *, void *);
+    int (*custom_log_check) (void *, int);
 };
 
 struct flb_plugin_proxy_context {
@@ -42,29 +42,23 @@ struct flb_plugin_proxy_context {
 /* This structure is used for initialization.
  * It matches the one in proxy/go/go.c in fluent-bit source code.
  */
-struct flbgo_output_plugin {
+struct flbgo_custom_plugin {
     void *_;
     struct flb_api *api;
-    struct flb_output_instance *o_ins;
+    struct flb_custom_instance *c_ins;
     struct flb_plugin_proxy_context *context;
 };
 
-char *output_get_property(char *key, void *plugin)
+char *custom_get_property(char *key, void *plugin)
 {
-    struct flbgo_output_plugin *p = plugin;
-    return p->api->output_get_property(key, p->o_ins);
+    struct flbgo_custom_plugin *p = plugin;
+    return p->api->custom_get_property(key, p->c_ins);
 }
 
-void *output_get_cmt_instance(void *plugin)
+void custom_log_print_novar(void *plugin, int log_level, const char* message)
 {
-    struct flbgo_output_plugin *p = plugin;
-    return p->api->output_get_cmt_instance(p->o_ins);
-}
-
-void output_log_print_novar(void *plugin, int log_level, const char* message)
-{
-    struct flbgo_output_plugin *p = plugin;
-    if (p->api->output_log_check(p->o_ins, log_level)) {
+    struct flbgo_custom_plugin *p = plugin;
+    if (p->api->custom_log_check(p->c_ins, log_level)) {
         /* all formating is done in golang, avoid fmt string bugs. */
         p->api->log_print(log_level, NULL, 0, "%s", message);
     }

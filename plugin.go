@@ -19,6 +19,7 @@ var (
 	theDesc   string
 	theInput  InputPlugin
 	theOutput OutputPlugin
+	theCustom CustomPlugin
 )
 
 var (
@@ -50,6 +51,11 @@ type InputPlugin interface {
 type OutputPlugin interface {
 	Init(ctx context.Context, fbit *Fluentbit) error
 	Flush(ctx context.Context, ch <-chan Message) error
+}
+
+// CustomPlugin interface to represent an input fluent-bit plugin.
+type CustomPlugin interface {
+	Init(ctx context.Context, fbit *Fluentbit) error
 }
 
 // ConfigLoader interface to represent a fluent-bit configuration loader.
@@ -114,4 +120,13 @@ func RegisterOutput(name, desc string, out OutputPlugin) {
 	theName = name
 	theDesc = desc
 	theOutput = out
+}
+
+// RegisterCustom plugin.
+// This function must be called only once per file.
+func RegisterCustom(name, desc string, custom CustomPlugin) {
+	mustOnce()
+	theName = name
+	theDesc = desc
+	theCustom = custom
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/vmihailenco/msgpack/v5"
 
 	cmetrics "github.com/calyptia/cmetrics-go"
+	"github.com/calyptia/plugin/custom"
 	"github.com/calyptia/plugin/input"
 	metricbuilder "github.com/calyptia/plugin/metric/cmetric"
 	"github.com/calyptia/plugin/output"
@@ -61,8 +62,8 @@ func FLBPluginPreRegister(hotReloading C.int) int {
 func FLBPluginRegister(def unsafe.Pointer) int {
 	defer registerWG.Done()
 
-	if theInput == nil && theOutput == nil {
-		fmt.Fprintf(os.Stderr, "no input or output registered\n")
+	if theInput == nil && theOutput == nil && theCustom == nil {
+		fmt.Fprintf(os.Stderr, "no input or output or custom registered\n")
 		return input.FLB_RETRY
 	}
 
@@ -74,12 +75,24 @@ func FLBPluginRegister(def unsafe.Pointer) int {
 		return out
 	}
 
-	out := output.FLBPluginRegister(def, theName, theDesc)
-	unregister = func() {
-		output.FLBPluginUnregister(def)
+	if theOutput != nil {
+		out := output.FLBPluginRegister(def, theName, theDesc)
+		unregister = func() {
+			output.FLBPluginUnregister(def)
+		}
+		return out
 	}
 
-	return out
+	if theCustom != nil {
+		out := custom.FLBPluginRegister(def, theName, theDesc)
+		unregister = func() {
+			custom.FLBPluginUnregister(def)
+		}
+
+		return out
+	}
+
+	return input.FLB_ERROR
 }
 
 func cleanup() int {
@@ -114,8 +127,8 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 	initWG.Add(1)
 	defer initWG.Done()
 
-	if theInput == nil && theOutput == nil {
-		fmt.Fprintf(os.Stderr, "no input or output registered\n")
+	if theInput == nil && theOutput == nil && theCustom == nil {
+		fmt.Fprintf(os.Stderr, "no input, output, or custom registered\n")
 		return input.FLB_RETRY
 	}
 
@@ -143,7 +156,7 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 				maxBufferedMessages = maxbuffered
 			}
 		}
-	} else {
+	} else if theOutput != nil {
 		conf := &flbOutputConfigLoader{ptr: ptr}
 		cmt, err = output.FLBPluginGetCMetricsContext(ptr)
 		if err != nil {
@@ -156,6 +169,15 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 			Logger:  logger,
 		}
 		err = theOutput.Init(ctx, fbit)
+	} else {
+		conf := &flbCustomConfigLoader{ptr: ptr}
+		logger = &flbCustomLogger{ptr: ptr}
+		fbit := &Fluentbit{
+			Conf:    conf,
+			Metrics: nil,
+			Logger:  logger,
+		}
+		err = theCustom.Init(ctx, fbit)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "init: %v\n", err)
@@ -545,6 +567,14 @@ func (f *flbOutputConfigLoader) String(key string) string {
 	return unquote(output.FLBPluginConfigKey(f.ptr, key))
 }
 
+type flbCustomConfigLoader struct {
+	ptr unsafe.Pointer
+}
+
+func (f *flbCustomConfigLoader) String(key string) string {
+	return unquote(custom.FLBPluginConfigKey(f.ptr, key))
+}
+
 type flbInputLogger struct {
 	ptr unsafe.Pointer
 }
@@ -591,6 +621,30 @@ func (f *flbOutputLogger) Info(format string, a ...any) {
 func (f *flbOutputLogger) Debug(format string, a ...any) {
 	message := fmt.Sprintf(format, a...)
 	output.FLBPluginLogPrint(f.ptr, output.FLB_LOG_DEBUG, message)
+}
+
+type flbCustomLogger struct {
+	ptr unsafe.Pointer
+}
+
+func (f *flbCustomLogger) Error(format string, a ...any) {
+	message := fmt.Sprintf(format, a...)
+	custom.FLBPluginLogPrint(f.ptr, output.FLB_LOG_ERROR, message)
+}
+
+func (f *flbCustomLogger) Warn(format string, a ...any) {
+	message := fmt.Sprintf(format, a...)
+	custom.FLBPluginLogPrint(f.ptr, output.FLB_LOG_WARN, message)
+}
+
+func (f *flbCustomLogger) Info(format string, a ...any) {
+	message := fmt.Sprintf(format, a...)
+	custom.FLBPluginLogPrint(f.ptr, output.FLB_LOG_INFO, message)
+}
+
+func (f *flbCustomLogger) Debug(format string, a ...any) {
+	message := fmt.Sprintf(format, a...)
+	custom.FLBPluginLogPrint(f.ptr, output.FLB_LOG_DEBUG, message)
 }
 
 func makeMetrics(cmp *cmetrics.Context) Metrics {
