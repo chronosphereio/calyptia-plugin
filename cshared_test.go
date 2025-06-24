@@ -47,6 +47,7 @@ func TestInputCallbackCtrlC(t *testing.T) {
 	timeout := time.NewTimer(1 * time.Second)
 	defer timeout.Stop()
 
+	// #nosec G103 creating a NULL pointer should be fine.
 	ptr := unsafe.Pointer(nil)
 
 	// prepare channel for input explicitly.
@@ -94,6 +95,7 @@ func TestInputCallbackDangle(t *testing.T) {
 	theInputLock.Unlock()
 
 	cdone := make(chan bool)
+	// #nosec G103 creating a NULL pointer should be fine.
 	ptr := unsafe.Pointer(nil)
 
 	// prepare channel for input explicitly.
@@ -165,6 +167,7 @@ func TestInputCallbackInfinite(t *testing.T) {
 
 	cdone := make(chan bool)
 	cshutdown := make(chan bool)
+	// #nosec G103 creating a NULL pointer should be fine.
 	ptr := unsafe.Pointer(nil)
 
 	// prepare channel for input explicitly.
@@ -363,6 +366,7 @@ func TestInputCallbackInfiniteConcurrent(t *testing.T) {
 
 	cdone := make(chan bool)
 	cstarted := make(chan bool)
+	// #nosec G103 creating a NULL pointer should be fine.
 	ptr := unsafe.Pointer(nil)
 
 	concurrentWait.Add(64)
