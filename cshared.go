@@ -135,7 +135,8 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var err error
-	if theInput != nil {
+	switch {
+	case theInput != nil:
 		defer cancel()
 		conf := &flbInputConfigLoader{ptr: ptr}
 		cmt, err = input.FLBPluginGetCMetricsContext(ptr)
@@ -156,7 +157,7 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 				maxBufferedMessages = maxbuffered
 			}
 		}
-	} else if theOutput != nil {
+	case theOutput != nil:
 		defer cancel()
 		conf := &flbOutputConfigLoader{ptr: ptr}
 		cmt, err = output.FLBPluginGetCMetricsContext(ptr)
@@ -170,8 +171,7 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 			Logger:  logger,
 		}
 		err = theOutput.Init(ctx, fbit)
-	} else {
-		// intended to longer liveness for custom plugin
+	default:
 		runCancel = cancel
 		conf := &flbCustomConfigLoader{ptr: ptr}
 		logger = &flbCustomLogger{ptr: ptr}
