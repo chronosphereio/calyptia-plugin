@@ -26,12 +26,13 @@ import "C"
 
 import (
 	"sync"
+	"unicode"
 	"unsafe"
 
 	cmetrics "github.com/calyptia/cmetrics-go"
 )
 
-// Define constants matching Fluent Bit core
+// Define constants matching Fluent Bit core.
 const (
 	FLB_ERROR = C.FLB_ERROR
 	FLB_OK    = C.FLB_OK

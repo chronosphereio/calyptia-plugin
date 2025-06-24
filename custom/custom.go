@@ -16,8 +16,6 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  */
-
-
 package custom
 
 /*
@@ -28,7 +26,7 @@ package custom
 import "C"
 import "unsafe"
 
-// Define constants matching Fluent Bit core
+// Define constants matching Fluent Bit core.
 const (
 	FLB_ERROR = C.FLB_ERROR
 	FLB_OK    = C.FLB_OK
