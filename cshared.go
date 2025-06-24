@@ -133,10 +133,10 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	var err error
 	if theInput != nil {
+		defer cancel()
 		conf := &flbInputConfigLoader{ptr: ptr}
 		cmt, err = input.FLBPluginGetCMetricsContext(ptr)
 		if err != nil {
@@ -157,6 +157,7 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 			}
 		}
 	} else if theOutput != nil {
+		defer cancel()
 		conf := &flbOutputConfigLoader{ptr: ptr}
 		cmt, err = output.FLBPluginGetCMetricsContext(ptr)
 		if err != nil {
@@ -170,6 +171,8 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 		}
 		err = theOutput.Init(ctx, fbit)
 	} else {
+		// intended to longer liveness for custom plugin
+		runCancel = cancel
 		conf := &flbCustomConfigLoader{ptr: ptr}
 		logger = &flbCustomLogger{ptr: ptr}
 		fbit := &Fluentbit{
