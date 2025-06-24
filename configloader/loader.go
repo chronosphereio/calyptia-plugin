@@ -126,6 +126,7 @@ func (cl *Loader) LoadFromFiles(configFiles ...string) *CalyptiaConfig {
 			parsedURL, err := url.Parse(host)
 			if err == nil {
 				fullURL := parsedURL.Scheme + "://" + parsedURL.Hostname()
+				//nolint:staticcheck // override the check for de morgan's law for now.
 				if !(calyptiaConfig.TLS && parsedURL.Port() == "443" || !calyptiaConfig.TLS && parsedURL.Port() == "80") && parsedURL.Port() != "" {
 					fullURL += ":" + parsedURL.Port()
 				}
