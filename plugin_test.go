@@ -37,10 +37,7 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	assert.NoError(t, err)
 
 	defer func() {
-		err := os.RemoveAll(f.Name())
-		if err != nil {
-			return
-		}
+		_ = os.RemoveAll(f.Name())
 	}()
 
 	// Set permissions on the file to be world-writable
@@ -126,8 +123,8 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 				return
 			}
 
-			contents, err := io.ReadAll(f)
-			assert.NoError(t, err)
+			contents, errread := io.ReadAll(f)
+			assert.NoError(t, errread)
 
 			contents = bytes.TrimSpace(contents)
 			lines := strings.Split(string(contents), "\n")
@@ -148,8 +145,8 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 				t.Log(line)
 
 				defer cancel()
-				err := json.Unmarshal([]byte(line), &got)
-				assert.NoError(t, err)
+				errmarshal := json.Unmarshal([]byte(line), &got)
+				assert.NoError(t, errmarshal)
 				assert.Equal(t, "bar", got.Foo)
 				assert.Equal(t, "hello from go-test-input-plugin", got.Message)
 				assert.Equal(t, "inside double quotes\nnew line", got.TmplOut)

@@ -152,8 +152,7 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 
 		err = theInput.Init(ctx, fbit)
 		if maxbuffered := fbit.Conf.String("go.MaxBufferedMessages"); maxbuffered != "" {
-			maxbuffered, err := strconv.Atoi(maxbuffered)
-			if err != nil {
+			if maxbuffered, errbuf := strconv.Atoi(maxbuffered); errbuf != nil {
 				maxBufferedMessages = maxbuffered
 			}
 		}
@@ -505,16 +504,16 @@ func decodeMsg(dec *msgpack.Decoder, tag string) (Message, error) {
 	eventTime := &EventTime{}
 	if err := msgpack.Unmarshal(entry[0], &eventTime); err != nil {
 		var eventWithMetadata []msgpack.RawMessage // for Fluent Bit V2 metadata type of format
-		if err := msgpack.Unmarshal(entry[0], &eventWithMetadata); err != nil {
-			return out, fmt.Errorf("msgpack unmarshal event with metadata: %w", err)
+		if errmsgpack := msgpack.Unmarshal(entry[0], &eventWithMetadata); errmsgpack != nil {
+			return out, fmt.Errorf("msgpack unmarshal event with metadata: %w", errmsgpack)
 		}
 
 		if len(eventWithMetadata) < 1 {
 			return out, fmt.Errorf("msgpack unmarshal event time with metadata: expected 1 element, got %d", len(eventWithMetadata))
 		}
 
-		if err := msgpack.Unmarshal(eventWithMetadata[0], &eventTime); err != nil {
-			return out, fmt.Errorf("msgpack unmarshal event time with metadata: %w", err)
+		if errunpack := msgpack.Unmarshal(eventWithMetadata[0], &eventTime); errunpack != nil {
+			return out, fmt.Errorf("msgpack unmarshal event time with metadata: %w", errunpack)
 		}
 
 		return out, fmt.Errorf("msgpack unmarshal event time: %w", err)
