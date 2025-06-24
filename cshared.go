@@ -229,7 +229,7 @@ func prepareOutputFlush(output OutputPlugin) error {
 // Lock used to synchronize access to theInput variable.
 var theInputLock sync.Mutex
 
-// prepareInputCollector is meant to prepare resources for input collectors
+// prepareInputCollector is meant to prepare resources for input collectors.
 func prepareInputCollector(multiInstance bool) {
 	runCtx, runCancel = context.WithCancel(context.Background())
 	if !multiInstance {

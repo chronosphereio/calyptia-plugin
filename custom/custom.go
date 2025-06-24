@@ -36,7 +36,7 @@ const (
 	FLB_PROXY_GOLANG        = C.FLB_PROXY_GOLANG
 )
 
-// Local type to define a plugin definition
+// Local type to define a plugin definition.
 type (
 	FLBPluginProxyDef C.struct_flb_plugin_proxy_def
 	FLBCustomInstance C.struct_flb_custom_instance
@@ -64,8 +64,7 @@ func FLBPluginConfigKey(plugin unsafe.Pointer, key string) string {
 	return value
 }
 
-// Release resources allocated by the plugin initialization
-//
+// Release resources allocated by the plugin initialization.
 func FLBPluginUnregister(def unsafe.Pointer) {
 	p := (*FLBPluginProxyDef)(def)
 	C.free(unsafe.Pointer(p.name))

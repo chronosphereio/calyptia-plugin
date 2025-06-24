@@ -67,7 +67,7 @@ func FLBPluginRegister(def unsafe.Pointer, name, desc string) int {
 	return 0
 }
 
-// FLBPluginUnregister release resources allocated by the plugin initialization
+// FLBPluginUnregister release resources allocated by the plugin initialization.
 func FLBPluginUnregister(def unsafe.Pointer) {
 	p := (*FLBPluginProxyDef)(def)
 	C.free(unsafe.Pointer(p.name))
