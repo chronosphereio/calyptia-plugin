@@ -40,8 +40,8 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 		_ = os.RemoveAll(f.Name())
 	}()
 
-	// Set permissions on the file to be world-writable
-	err = os.Chmod(f.Name(), 0o777)
+	// Set permissions on the file to be writable
+	err = os.Chmod(f.Name(), 0o600)
 	assert.NoError(t, err)
 
 	buildOpts := dc.BuildImageOptions{
