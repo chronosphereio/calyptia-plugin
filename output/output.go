@@ -26,7 +26,6 @@ import "C"
 
 import (
 	"sync"
-	"unicode"
 	"unsafe"
 
 	cmetrics "github.com/calyptia/cmetrics-go"
