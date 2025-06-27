@@ -35,6 +35,7 @@ var dummyRecord [29]byte = [29]byte{
 }
 
 func TestGetRecord(t *testing.T) {
+	// #nosec G103 This points to valid statically initialized memory and this is run as a test.
 	dec := NewDecoder(unsafe.Pointer(&dummyRecord), len(dummyRecord))
 	if dec == nil {
 		t.Fatal("dec is nil")

@@ -15,6 +15,10 @@ type extensionsPlugin struct {
 	log          plugin.Logger
 }
 
+const (
+	defaultTimeoutSeconds = 10
+)
+
 func (plug *extensionsPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) error {
 	plug.log = fbit.Logger
 
@@ -22,7 +26,7 @@ func (plug *extensionsPlugin) Init(ctx context.Context, fbit *plugin.Fluentbit) 
 	go func() {
 		for {
 			plug.log.Debug("[custom-go] Go extensions alive %v", time.Now())
-			time.Sleep(10 * time.Second)
+			time.Sleep(defaultTimeoutSeconds * time.Second)
 		}
 	}()
 

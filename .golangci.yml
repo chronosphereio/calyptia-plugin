@@ -1,87 +1,94 @@
-run:
-  # timeout for analysis, e.g. 30s, 5m, default is 1m
-  timeout: 5m
-  # default is true. Enables skipping of directories:
-  #   vendor$, third_party$, testdata$, examples$, Godeps$, builtin$
-  skip-dirs-use-default: true
-linters-settings:
-  funlen:
-    lines: 100
-    statements: 50
-  goimports:
-    local-prefixes: github.com/calyptia/cloud
-  revive:
-    min-confidence: 0.8
-  gocyclo:
-    min-complexity: 25
-  govet:
-    shadow:
-      strict: true
-  misspell:
-    locale: US
-  mnd:
-    ignored-numbers:
-      - 2 #used for word splitting.
-  gocognit:
-    min-complexity: 54
-  nolintlint:
-    allow-leading-space: false # require machine-readable nolint directives (with no leading space)
-    allow-unused: false # report any unused nolint directives
-    require-explanation: true # require an explanation for nolint directives
-    require-specific: false # don't require nolint directives to be specific about which linter is being skipped
-
+version: 2
 linters:
-  # please, do not use `enable-all`: it's deprecated and will be removed soon.
-  # inverted configuration with `enable-all` and `disable` is not scalable during updates of golangci-lint
-  disable-all: true
   enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - typecheck
-    - unused
     - bodyclose
     - dupl
-    - exportloopref
+    - errcheck
     - forcetypeassert
     - funlen
-    - gci
     - gocognit
     - goconst
     - gocritic
     - gocyclo
     - godot
-    - gofumpt
-    - revive
-    - mnd
     - goprintffuncname
     - gosec
+    - govet
+    - ineffassign
     - misspell
+    - mnd
     - noctx
     - nolintlint
+    - revive
     - rowserrcheck
     - sqlclosecheck
-    - stylecheck
+    - staticcheck
     - thelper
     - tparallel
     - unconvert
     - unparam
+    - unused
     - whitespace
-issues:
-  exclude-use-default: false
-  exclude-rules:
-    - linters:
-        - funlen
-        - stylecheck
-        - gocyclo
-        - gocognit
-        - revive
-        - dupl
-        - goconst
-        - errcheck
-        - bodyclose
-        - mnd
-        - thelper
-      path: ".*test.*.go"
+  settings:
+    funlen:
+      lines: 100
+      statements: 50
+    gocognit:
+      min-complexity: 54
+    gocyclo:
+      min-complexity: 25
+    govet:
+      enable:
+        - shadow
+    misspell:
+      locale: US
+    mnd:
+      ignored-numbers:
+        - "2"
+    nolintlint:
+      require-explanation: true
+      require-specific: false
+      allow-unused: false
+    revive:
+      confidence: 0.8
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - bodyclose
+          - dupl
+          - errcheck
+          - funlen
+          - gocognit
+          - goconst
+          - gocyclo
+          - mnd
+          - revive
+          - staticcheck
+          - thelper
+        path: .*test.*.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofumpt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/calyptia/)
+    gofumpt:
+      extra-rules: false
+  exclusions:
+    generated: lax
+    paths:
+      - custom/custom.go
+      - input/input.go
+      - output/output.go
+      - third_party$
+      - builtin$
+      - examples/*

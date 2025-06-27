@@ -25,7 +25,9 @@ func init() {
 
 func (tm *EventTime) MarshalMsgpack() ([]byte, error) {
 	b := make([]byte, eventTimeBytesLen)
+	// #nosec G115 event time uses 32 bit unix timestamps on fluent-bit side.
 	binary.BigEndian.PutUint32(b, uint32(tm.Unix()))
+	// #nosec G115 event time uses 32 bit unix timestamps on fluent-bit side.
 	binary.BigEndian.PutUint32(b[4:], uint32(tm.Nanosecond()))
 	return b, nil
 }
