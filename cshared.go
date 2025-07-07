@@ -202,6 +202,7 @@ func flbPluginReset() {
 	}()
 
 	close(theChannel)
+	theChannel = nil
 	theInput = nil
 }
 
@@ -230,24 +231,16 @@ func prepareOutputFlush(output OutputPlugin) error {
 var theInputLock sync.Mutex
 
 // prepareInputCollector is meant to prepare resources for input collectors
-func prepareInputCollector(multiInstance bool) {
+func prepareInputCollector() {
 	runCtx, runCancel = context.WithCancel(context.Background())
-	if !multiInstance {
-		theChannel = make(chan Message, maxBufferedMessages)
-	}
 
 	theInputLock.Lock()
-	if multiInstance {
-		if theChannel == nil {
-			theChannel = make(chan Message, maxBufferedMessages)
-		}
-		defer theInputLock.Unlock()
+	if theChannel == nil {
+		theChannel = make(chan Message, maxBufferedMessages)
 	}
+	defer theInputLock.Unlock()
 
 	go func(theChannel chan<- Message) {
-		if !multiInstance {
-			defer theInputLock.Unlock()
-		}
 
 		go func(theChannel chan<- Message) {
 			err := theInput.Collect(runCtx, theChannel)
@@ -269,7 +262,7 @@ func prepareInputCollector(multiInstance bool) {
 func FLBPluginInputPreRun(useHotReload C.int) int {
 	registerWG.Wait()
 
-	prepareInputCollector(true)
+	prepareInputCollector()
 
 	return input.FLB_OK
 }
@@ -300,7 +293,7 @@ func FLBPluginInputPause() {
 //
 //export FLBPluginInputResume
 func FLBPluginInputResume() {
-	prepareInputCollector(true)
+	prepareInputCollector()
 }
 
 // FLBPluginOutputPreExit this method gets invoked by the fluent-bit runtime, once the plugin has been

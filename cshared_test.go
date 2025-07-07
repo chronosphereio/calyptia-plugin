@@ -33,12 +33,13 @@ func init() {
 	registerWG.Done()
 }
 
-func TestMain(m *testing.M) {
-	defer flbPluginReset()
-	m.Run()
+func prepareInputForTests(t *testing.T) {
+	prepareInputCollector()
+	t.Cleanup(flbPluginReset)
 }
 
 func TestInputCallbackCtrlC(t *testing.T) {
+	flbPluginReset()
 	theInputLock.Lock()
 	theInput = testPluginInputCallbackCtrlC{}
 	theInputLock.Unlock()
@@ -49,8 +50,7 @@ func TestInputCallbackCtrlC(t *testing.T) {
 
 	ptr := unsafe.Pointer(nil)
 
-	// prepare channel for input explicitly.
-	prepareInputCollector(false)
+	prepareInputForTests(t)
 
 	go func() {
 		FLBPluginInputCallback(&ptr, nil)
@@ -96,8 +96,7 @@ func TestInputCallbackDangle(t *testing.T) {
 	cdone := make(chan bool)
 	ptr := unsafe.Pointer(nil)
 
-	// prepare channel for input explicitly.
-	prepareInputCollector(false)
+	prepareInputForTests(t)
 
 	go func() {
 		t := time.NewTicker(collectInterval)
@@ -167,8 +166,7 @@ func TestInputCallbackInfinite(t *testing.T) {
 	cshutdown := make(chan bool)
 	ptr := unsafe.Pointer(nil)
 
-	// prepare channel for input explicitly.
-	prepareInputCollector(false)
+	prepareInputForTests(t)
 
 	go func() {
 		t := time.NewTicker(collectInterval)
@@ -249,8 +247,7 @@ func TestInputCallbackLatency(t *testing.T) {
 	cstarted := make(chan bool)
 	cmsg := make(chan []byte)
 
-	// prepare channel for input explicitly.
-	prepareInputCollector(false)
+	prepareInputForTests(t)
 
 	go func() {
 		t := time.NewTicker(collectInterval)
@@ -367,8 +364,7 @@ func TestInputCallbackInfiniteConcurrent(t *testing.T) {
 
 	concurrentWait.Add(64)
 
-	// prepare channel for input explicitly.
-	prepareInputCollector(false)
+	prepareInputForTests(t)
 
 	go func(cstarted chan bool) {
 		ticker := time.NewTicker(time.Second * 1)
