@@ -1,6 +1,8 @@
 module github.com/fluent/fluent-bit-go/examples/gdummy
 
-go 1.22.4
+go 1.23.0
+
+toolchain go1.24.2
 
 require github.com/calyptia/plugin v0.1.6
 
