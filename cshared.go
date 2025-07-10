@@ -39,7 +39,6 @@ const (
 func FLBPluginPreRegister(hotReloading C.int) int {
 	if hotReloading == C.int(1) {
 		registerWG.Add(1)
-		pluginMeta.Store(nil)
 	}
 
 	return input.FLB_OK
@@ -49,46 +48,38 @@ func FLBPluginPreRegister(hotReloading C.int) int {
 // can be provided.
 //
 //export FLBPluginRegister
-func FLBPluginRegister(def unsafe.Pointer) (returnCode int) {
-	defer func() {
-		// Only unblock waiters on registerWG if registration succeeds
-		if returnCode == input.FLB_OK {
-			registerWG.Done()
-		}
-	}()
-
+func FLBPluginRegister(def unsafe.Pointer) int {
 	meta := pluginMeta.Load()
 	if meta == nil {
 		fmt.Fprintf(os.Stderr, "no input, output, or custom plugin registered\n")
 		return input.FLB_RETRY
 	}
 
-	if unregisterFunc.Load() != nil {
-		fmt.Fprintf(os.Stderr, "plugin already registered\n")
-		return input.FLB_ERROR
-	}
-
 	var newUnregisterFunc func()
-
+	var registerCode int
 	if meta.input != nil {
-		returnCode = input.FLBPluginRegister(def, meta.name, meta.desc)
+		registerCode = input.FLBPluginRegister(def, meta.name, meta.desc)
 		newUnregisterFunc = func() { input.FLBPluginUnregister(def) }
 	} else if meta.output != nil {
-		returnCode = output.FLBPluginRegister(def, meta.name, meta.desc)
+		registerCode = output.FLBPluginRegister(def, meta.name, meta.desc)
 		newUnregisterFunc = func() { output.FLBPluginUnregister(def) }
 	} else if meta.custom != nil {
-		returnCode = custom.FLBPluginRegister(def, meta.name, meta.desc)
+		registerCode = custom.FLBPluginRegister(def, meta.name, meta.desc)
 		newUnregisterFunc = func() { custom.FLBPluginUnregister(def) }
 	} else {
 		fmt.Fprintf(os.Stderr, "no input, output, or custom plugin registered\n")
 		return input.FLB_RETRY
 	}
 
-	if returnCode == input.FLB_OK {
-		unregisterFunc.Store(&newUnregisterFunc)
+	if registerCode != 0 {
+		fmt.Fprintf(os.Stderr, "error calling plugin register function\n")
+		return input.FLB_RETRY
 	}
 
-	return
+	unregisterFunc.Store(&newUnregisterFunc)
+	registerWG.Done()
+
+	return input.FLB_OK
 }
 
 // FLBPluginInit this method gets invoked once by the fluent-bit runtime at initialisation phase.
