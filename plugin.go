@@ -24,6 +24,7 @@ import (
 	"github.com/calyptia/cmetrics-go"
 	"github.com/calyptia/plugin/input"
 	"github.com/calyptia/plugin/metric"
+	"github.com/calyptia/plugin/output"
 )
 
 var (
@@ -377,6 +378,11 @@ func (p *pluginInstance) outputPreRunWithLock() error {
 // Consumed messages are marshaled into msgpack bytes and the contents and length of contents
 // set in the respective data and csize input variables.
 func (p *pluginInstance) inputCallback(data *unsafe.Pointer, csize *C.size_t) int {
+	if p.meta.input == nil {
+		fmt.Fprintf(os.Stderr, "no input registered\n")
+		return output.FLB_RETRY
+	}
+
 	p.mu.Lock()
 	if p.state != instanceStateRunnable {
 		p.mu.Unlock()
@@ -396,7 +402,7 @@ func (p *pluginInstance) inputCallback(data *unsafe.Pointer, csize *C.size_t) in
 				return input.FLB_ERROR
 			}
 
-			b, err := msgpack.Marshal([]any{&EventTime{msg.Time}, msg.Record})
+			b, err := marshalMsg(msg)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "msgpack marshal: %s\n", err)
 				return input.FLB_ERROR
@@ -435,6 +441,10 @@ func (p *pluginInstance) inputCallback(data *unsafe.Pointer, csize *C.size_t) in
 // outputFlush writes the messages in msgpackBytes to the plugin's message channel,
 // returning early if the plugin is shutdown.
 func (p *pluginInstance) outputFlush(tag string, msgpackBytes []byte) error {
+	if p.meta.output == nil {
+		return retryableError{fmt.Errorf("no output plugin registered")}
+	}
+
 	p.mu.Lock()
 	if p.state != instanceStateRunnable {
 		p.mu.Unlock()
@@ -451,7 +461,6 @@ func (p *pluginInstance) outputFlush(tag string, msgpackBytes []byte) error {
 		case <-p.runCtx.Done():
 			err := p.runCtx.Err()
 			if err != nil && !errors.Is(err, context.Canceled) {
-				fmt.Fprintf(os.Stderr, "run: %s\n", err)
 				return fmt.Errorf("run: %w", err)
 			}
 
@@ -537,6 +546,9 @@ func (p *pluginInstance) outputPreExit() error {
 		return fmt.Errorf("plugin is not an output plugin")
 	}
 
+	if p.state == instanceStatePreExit {
+		return nil
+	}
 	if p.state != instanceStateRunnable {
 		return fmt.Errorf("invalid plugin state %q", p.state)
 	}
@@ -560,6 +572,22 @@ func flbReturnCode(err error) int {
 	if err == nil {
 		return input.FLB_OK
 	}
+	if errors.Is(err, retryableError{}) {
+		return input.FLB_RETRY
+	}
 
 	return input.FLB_ERROR
+}
+
+type retryableError struct {
+	error
+}
+
+func (r retryableError) Unwrap() error {
+	return r.error
+}
+
+func (r retryableError) Is(target error) bool {
+	_, ok := target.(retryableError)
+	return ok
 }

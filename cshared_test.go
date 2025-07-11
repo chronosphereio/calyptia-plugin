@@ -22,41 +22,6 @@ import (
 	"github.com/calyptia/plugin/metric"
 )
 
-// TestMain wraps all tests to clean up any calls that mutated globals via public FLB* functions.
-func TestMain(m *testing.M) {
-	cleanupDone := make(chan struct{})
-	defer func() {
-		// Cleanup in a goroutine since buggy plugins or code might indefinitely block
-		go func() {
-			defer close(cleanupDone)
-
-			setupInstanceForTesting = nil
-
-			currInstanceMu.Lock()
-			defer currInstanceMu.Unlock()
-
-			if currInstance != nil {
-				if currInstance.meta.output != nil {
-					FLBPluginOutputPreExit()
-				}
-				FLBPluginExit()
-			}
-			if pluginMeta.Load() != nil {
-				pluginMeta.Store(nil)
-			}
-		}()
-
-		// Ensure cleanup finished
-		select {
-		case <-cleanupDone:
-		case <-time.After(2 * time.Second):
-			panic("timed out cleaning up global plugin instance")
-		}
-	}()
-
-	m.Run()
-}
-
 func newTestInputInstance(t testing.TB, input InputPlugin) *pluginInstance {
 	inst := pluginInstanceWithFakes(newPluginInstance(pluginMetadata{
 		name:  "test-plugin",
@@ -87,7 +52,21 @@ func newTestOutputInstance(t testing.TB, output OutputPlugin) *pluginInstance {
 		desc:   "test plugin",
 		output: output,
 	}))
-	t.Cleanup(func() { assert.NoError(t, inst.stop()) })
+	t.Cleanup(func() {
+		stopErr := make(chan error, 2)
+		go func() {
+			stopErr <- inst.stop()
+		}()
+
+		select {
+		case err := <-stopErr:
+			assert.NoError(t, err)
+			return
+		case <-time.After(time.Second):
+			require.Fail(t, "timed out waiting for instance to stop")
+		}
+	})
+
 	return inst
 }
 
@@ -166,9 +145,11 @@ func TestInputCallbackLifecycle(t *testing.T) {
 	require.False(t, plugin.collectRunning.Load())
 }
 
-// TestGlobalCallbacks is a simplified variant of TestInputCallbackLifecycle that uses the
+// TestInputGlobalCallbacks is a simplified variant of TestInputCallbackLifecycle that uses the
 // C callback functions invoked by fluent-bit.
-func TestGlobalCallbacks(t *testing.T) {
+func TestInputGlobalCallbacks(t *testing.T) {
+	t.Cleanup(resetGlobalState)
+
 	plugin := newTestInputPlugin()
 
 	// Registration
@@ -228,6 +209,101 @@ func TestGlobalCallbacks(t *testing.T) {
 	// Stop again
 	FLBPluginExit()
 	require.False(t, plugin.collectRunning.Load())
+	require.Equal(t, input.FLB_OK, FLBPluginExit()) // Idempotent
+}
+
+// TestOutputCallbackLifecycle is a simplified variant of TestOutputCallbackLifecycle that uses the
+// C callback functions invoked by fluent-bit.
+func TestOutputCallbackLifecycle(t *testing.T) {
+	plugin := newTestOutputPlugin()
+	inst := newTestOutputInstance(t, plugin)
+
+	// Initialization
+	require.NoError(t, inst.init(nil))
+	require.Equal(t, int64(1), plugin.initCount.Load())
+
+	require.ErrorContains(t, inst.init(nil), `unexpected plugin state "initialized"`)
+	require.Equal(t, int64(1), plugin.initCount.Load(), "initialization should only run once")
+
+	// Early attempt to flush
+	require.ErrorContains(t, inst.outputFlush("", nil), `invalid plugin state "initialized"`)
+
+	// Pre-run
+	require.NoError(t, inst.resume())
+	require.Eventually(t, plugin.flushRunning.Load, time.Second, time.Millisecond,
+		"flush background loop should have started running")
+
+	// Flush
+	m1 := testMessage(map[string]any{"name": "m1"})
+	m2 := testMessage(map[string]any{"name": "m2"})
+	require.NoError(t, inst.outputFlush("", mustMarshalMessages(t, []Message{m1, m2})))
+	require.Eventually(t, func() bool { return len(plugin.flushedMessages) == 2 }, time.Second, time.Millisecond)
+	require.Equal(t, []Message{m1, m2}, []Message{<-plugin.flushedMessages, <-plugin.flushedMessages})
+
+	m3 := testMessage(map[string]any{"name": "m3"})
+	require.NoError(t, inst.outputFlush("", mustMarshalMessages(t, []Message{m3})))
+	require.Eventually(t, func() bool { return len(plugin.flushedMessages) == 1 }, time.Second, time.Millisecond)
+	require.Equal(t, []Message{m3}, []Message{<-plugin.flushedMessages})
+
+	require.ErrorContains(t, inst.resume(), `invalid plugin state "runnable"`)
+
+	// Pre-exit
+	require.NoError(t, inst.outputPreExit())
+	require.False(t, plugin.flushRunning.Load())
+	require.NoError(t, inst.outputPreExit(), "outputPreExit should be idempotent")
+
+	// Exit
+	require.NoError(t, inst.stop())
+	require.NoError(t, inst.stop(), "stop should be idempotent")
+}
+
+func TestOutputGlobalCallbacks(t *testing.T) {
+	t.Cleanup(resetGlobalState)
+
+	plugin := newTestOutputPlugin()
+
+	// Registration
+	RegisterOutput("test-name", "test-desc", plugin)
+	FLBPluginRegister(unsafe.Pointer(&input.FLBPluginProxyDef{}))
+
+	require.Equal(t, &pluginMetadata{
+		name:   "test-name",
+		desc:   "test-desc",
+		output: plugin,
+	}, pluginMeta.Load())
+
+	// Initialization
+	setupInstanceForTesting = func(inst *pluginInstance) {
+		pluginInstanceWithFakes(inst)
+	}
+	FLBPluginInit(nil)
+	require.Equal(t, int64(1), plugin.initCount.Load())
+
+	currInstanceMu.Lock()
+	inst := currInstance
+	currInstanceMu.Unlock()
+	require.NotNil(t, inst)
+
+	// Pre-run
+	FLBPluginOutputPreRun(0)
+	require.Eventually(t, plugin.flushRunning.Load, time.Second, time.Millisecond,
+		"flush background loop should have started running")
+
+	// Flush
+	m1 := testMessage(map[string]any{"name": "m1"})
+	m2 := testMessage(map[string]any{"name": "m2"})
+	require.Equal(t, input.FLB_OK, testFLBPluginFlush(mustMarshalMessages(t, []Message{m1, m2}), ""))
+	require.Eventually(t, func() bool { return len(plugin.flushedMessages) == 2 }, time.Second, time.Millisecond)
+	require.Equal(t, []Message{m1, m2}, []Message{<-plugin.flushedMessages, <-plugin.flushedMessages})
+
+	// Pre-exit
+	FLBPluginOutputPreExit()
+	require.False(t, plugin.flushRunning.Load())
+	FLBPluginOutputPreExit() // Idempotent
+
+	// Exit
+	FLBPluginExit()
+	require.Equal(t, input.FLB_OK, FLBPluginExit()) // Idempotent
 }
 
 // testMessage returns a Message with the given record map and current timestamp.
@@ -308,6 +384,39 @@ func decodeMessages(t testing.TB, msgpackBytes []byte) []Message {
 		require.NoError(t, err)
 
 		messages = append(messages, msg)
+	}
+}
+
+func newTestOutputPlugin() *testOutputPlugin {
+	return &testOutputPlugin{
+		flushedMessages: make(chan Message, 100),
+	}
+}
+
+type testOutputPlugin struct {
+	initCount       atomic.Int64 // Count of calls to Init method.
+	flushRunning    atomic.Bool  // Indicates whether the Flush method is running.
+	flushedMessages chan Message
+}
+
+var _ OutputPlugin = (*testOutputPlugin)(nil)
+
+func (t *testOutputPlugin) Init(ctx context.Context, fbit *Fluentbit) error {
+	t.initCount.Add(1)
+	return nil
+}
+
+func (t *testOutputPlugin) Flush(ctx context.Context, ch <-chan Message) error {
+	t.flushRunning.Store(true)
+	defer t.flushRunning.Store(false)
+
+	for {
+		select {
+		case m := <-ch:
+			t.flushedMessages <- m
+		case <-ctx.Done():
+			return nil
+		}
 	}
 }
 
@@ -871,4 +980,45 @@ var _ ConfigLoader = (fakeConfigLoader)(nil)
 
 func (f fakeConfigLoader) String(key string) string {
 	return f[key]
+}
+
+func mustMarshalMessages(t testing.TB, msgs []Message) []byte {
+	var buf bytes.Buffer
+	for _, msg := range msgs {
+		b, err := marshalMsg(msg)
+		require.NoError(t, err)
+		buf.Write(b)
+	}
+	return buf.Bytes()
+}
+
+// resetGlobalState resets global plugin state. Intended for use by tests that call stateless FLB* functions.
+func resetGlobalState() {
+	cleanupDone := make(chan struct{})
+	go func() {
+		defer close(cleanupDone)
+
+		setupInstanceForTesting = nil
+
+		currInstanceMu.Lock()
+		defer currInstanceMu.Unlock()
+
+		if currInstance != nil {
+			if currInstance.meta.output != nil {
+				FLBPluginOutputPreExit()
+			}
+			FLBPluginExit()
+		}
+		if pluginMeta.Load() != nil {
+			registerWG.Add(1)
+			pluginMeta.Store(nil)
+		}
+	}()
+
+	// Ensure cleanup finished
+	select {
+	case <-cleanupDone:
+	case <-time.After(2 * time.Second):
+		panic("timed out cleaning up global plugin instance")
+	}
 }

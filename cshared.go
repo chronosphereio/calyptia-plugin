@@ -6,7 +6,6 @@ package plugin
 import "C"
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -146,7 +145,11 @@ func FLBPluginInputPause() {
 	currInstanceMu.Unlock()
 
 	if instance == nil {
-		panic(fmt.Errorf("plugin not initialized"))
+		panic("plugin not initialized")
+	}
+
+	if instance.meta.input == nil {
+		panic("can only pause input plugins")
 	}
 
 	if err := instance.stop(); err != nil {
@@ -250,35 +253,17 @@ func FLBPluginFlush(data unsafe.Pointer, clength C.int, ctag *C.char) int {
 	instance := currInstance
 	currInstanceMu.Unlock()
 
-	if instance == nil || instance.state != instanceStateRunnable {
-		return output.FLB_RETRY
-	}
-
-	if instance.meta.output == nil {
-		fmt.Fprintf(os.Stderr, "no output registered\n")
-		return output.FLB_RETRY
-	}
-
-	select {
-	case <-instance.runCtx.Done():
-		err := instance.runCtx.Err()
-		if err != nil && !errors.Is(err, context.Canceled) {
-			fmt.Fprintf(os.Stderr, "run: %s\n", err)
-			return output.FLB_ERROR
-		}
-
-		return output.FLB_OK
-	default:
-	}
-
 	in := C.GoBytes(data, clength)
 	tag := C.GoString(ctag)
-	if err := instance.outputFlush(tag, in); err != nil {
-		fmt.Fprintf(os.Stderr, "flush: %s\n", err)
-		return output.FLB_ERROR
+	err := instance.outputFlush(tag, in)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "plugin flush error: %v\n", err)
 	}
+	return flbReturnCode(err)
+}
 
-	return output.FLB_OK
+func marshalMsg(m Message) ([]byte, error) {
+	return msgpack.Marshal([]any{&EventTime{m.Time}, m.Record})
 }
 
 // decodeMsg should be called with an already initialized decoder.
@@ -469,6 +454,16 @@ func makeMetrics(cmp *cmetrics.Context) Metrics {
 			fmt.Fprintf(os.Stderr, "metrics: %s\n", err)
 		},
 	}
+}
+
+func testFLBPluginFlush(data []byte, tag string) int {
+	cdata := C.CBytes(data)
+	defer C.free(unsafe.Pointer(cdata))
+
+	ctag := C.CString(tag)
+	defer C.free(unsafe.Pointer(ctag))
+
+	return FLBPluginFlush(cdata, C.int(len(data)), ctag)
 }
 
 // testCallback invokes the callback and returns the bytes outputted from it.
