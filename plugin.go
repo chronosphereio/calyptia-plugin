@@ -24,7 +24,6 @@ import (
 	"github.com/calyptia/cmetrics-go"
 	"github.com/calyptia/plugin/input"
 	"github.com/calyptia/plugin/metric"
-	"github.com/calyptia/plugin/output"
 )
 
 var (
@@ -377,16 +376,15 @@ func (p *pluginInstance) outputPreRunWithLock() error {
 // returning early if the plugin is shutdown.
 // Consumed messages are marshaled into msgpack bytes and the contents and length of contents
 // set in the respective data and csize input variables.
-func (p *pluginInstance) inputCallback(data *unsafe.Pointer, csize *C.size_t) int {
+func (p *pluginInstance) inputCallback(data *unsafe.Pointer, csize *C.size_t) error {
 	if p.meta.input == nil {
-		fmt.Fprintf(os.Stderr, "no input registered\n")
-		return output.FLB_RETRY
+		return retryableError{fmt.Errorf("no input registered")}
 	}
 
 	p.mu.Lock()
 	if p.state != instanceStateRunnable {
 		p.mu.Unlock()
-		return input.FLB_RETRY
+		return retryableError{fmt.Errorf("unexpected plugin state %q", p.state)}
 	}
 
 	p.runningWG.Add(1)
@@ -399,13 +397,12 @@ func (p *pluginInstance) inputCallback(data *unsafe.Pointer, csize *C.size_t) in
 		select {
 		case msg, ok := <-p.msgChannel:
 			if !ok {
-				return input.FLB_ERROR
+				return fmt.Errorf("cannot consume from message channel")
 			}
 
 			b, err := marshalMsg(msg)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "msgpack marshal: %s\n", err)
-				return input.FLB_ERROR
+				return fmt.Errorf("msgpack marshal error: %w", err)
 			}
 
 			buf.Grow(len(b))
@@ -413,8 +410,7 @@ func (p *pluginInstance) inputCallback(data *unsafe.Pointer, csize *C.size_t) in
 		case <-p.runCtx.Done():
 			err := p.runCtx.Err()
 			if err != nil && !errors.Is(err, context.Canceled) {
-				fmt.Fprintf(os.Stderr, "run: %s\n", err)
-				return input.FLB_ERROR
+				return err
 			}
 			// enforce a runtime gc, to prevent the thread finalizer on
 			// fluent-bit to kick in before any remaining data has not been GC'ed
@@ -435,7 +431,7 @@ func (p *pluginInstance) inputCallback(data *unsafe.Pointer, csize *C.size_t) in
 		}
 	}
 
-	return input.FLB_OK
+	return nil
 }
 
 // outputFlush writes the messages in msgpackBytes to the plugin's message channel,

@@ -233,7 +233,12 @@ func FLBPluginInputCallback(data *unsafe.Pointer, csize *C.size_t) int {
 		return input.FLB_RETRY
 	}
 
-	return instance.inputCallback(data, csize)
+	err := instance.inputCallback(data, csize)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "callback error: %v\n", err)
+	}
+
+	return flbReturnCode(err)
 }
 
 // FLBPluginInputCleanupCallback releases the memory used during the input callback
@@ -466,18 +471,32 @@ func testFLBPluginFlush(data []byte, tag string) int {
 	return FLBPluginFlush(cdata, C.int(len(data)), ctag)
 }
 
-// testCallback invokes the callback and returns the bytes outputted from it.
+// testInputCallback invokes inputCallback and returns the bytes outputted from it.
 // This cannot be in the test file since test files can't use CGO.
-func testCallback(callbackFunc func(data *unsafe.Pointer, csize *C.size_t) int) ([]byte, int) {
+func testInputCallback(inst *pluginInstance) ([]byte, error) {
 	data := unsafe.Pointer(nil)
 	var csize C.size_t
 
-	retCode := callbackFunc(&data, &csize)
+	err := inst.inputCallback(&data, &csize)
 
 	if data == nil {
-		return []byte{}, retCode
+		return []byte{}, err
 	}
 
 	defer C.free(data)
-	return C.GoBytes(data, C.int(csize)), retCode
+	return C.GoBytes(data, C.int(csize)), err
+}
+
+func testFLBPluginInputCallback() ([]byte, int) {
+	data := unsafe.Pointer(nil)
+	var csize C.size_t
+
+	retVal := FLBPluginInputCallback(&data, &csize)
+
+	if data == nil {
+		return []byte{}, retVal
+	}
+
+	defer C.free(data)
+	return C.GoBytes(data, C.int(csize)), retVal
 }

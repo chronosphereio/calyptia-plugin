@@ -92,8 +92,9 @@ func TestInputCallbackLifecycle(t *testing.T) {
 	require.Equal(t, int64(1), plugin.initCount.Load(), "initialization should only run once")
 
 	// Early attempt to callback
-	_, callbackResp := testCallback(inst.inputCallback)
-	require.Equal(t, input.FLB_RETRY, callbackResp, "pre-run must be called before callback")
+	_, err := testInputCallback(inst)
+	require.ErrorIs(t, err, retryableError{})
+	require.ErrorContains(t, err, `unexpected plugin state "initialized"`)
 
 	// Pre-run
 	require.NoError(t, inst.resume())
@@ -107,8 +108,8 @@ func TestInputCallbackLifecycle(t *testing.T) {
 	require.ErrorContains(t, inst.resume(), `invalid plugin state "runnable"`)
 
 	// Callback
-	callbackBytes, callbackResp := testCallback(inst.inputCallback)
-	require.Equal(t, input.FLB_OK, callbackResp)
+	callbackBytes, err := testInputCallback(inst)
+	require.NoError(t, err)
 	require.Equal(t, []Message{m1, m2}, decodeMessages(t, callbackBytes))
 	require.True(t, plugin.collectRunning.Load())
 
@@ -122,22 +123,23 @@ func TestInputCallbackLifecycle(t *testing.T) {
 	require.False(t, plugin.collectRunning.Load())
 	require.NoError(t, inst.stop(), "stop should be idempotent")
 
-	callbackBytes, callbackResp = testCallback(inst.inputCallback)
-	require.Equal(t, input.FLB_RETRY, callbackResp)
+	callbackBytes, err = testInputCallback(inst)
+	require.ErrorIs(t, err, retryableError{})
+	require.ErrorContains(t, err, `unexpected plugin state "initialized"`)
 	assert.Empty(t, callbackBytes)
 
 	// Resume stopped pipeline
 	require.NoError(t, inst.resume())
 	require.ErrorContains(t, inst.resume(), `invalid plugin state "runnable"`)
-	callbackBytes, callbackResp = testCallback(inst.inputCallback)
-	require.Equal(t, input.FLB_OK, callbackResp)
+	callbackBytes, err = testInputCallback(inst)
+	require.NoError(t, err)
 	assert.Empty(t, callbackBytes, "m3 message from earlier not dequeued")
 	require.Eventually(t, plugin.collectRunning.Load, time.Second, time.Millisecond,
 		"collect background loop should have started running")
 	m4 := testMessage(map[string]any{"name": "m4"})
 	plugin.enqueue(m4)()
-	callbackBytes, callbackResp = testCallback(inst.inputCallback)
-	require.Equal(t, input.FLB_OK, callbackResp)
+	callbackBytes, err = testInputCallback(inst)
+	require.NoError(t, err)
 	require.Equal(t, []Message{m4}, decodeMessages(t, callbackBytes))
 
 	// Stop again
@@ -182,7 +184,7 @@ func TestInputGlobalCallbacks(t *testing.T) {
 	plugin.enqueue(m1)()
 
 	// Callback
-	callbackBytes, callbackResp := testCallback(FLBPluginInputCallback)
+	callbackBytes, callbackResp := testFLBPluginInputCallback()
 	require.Equal(t, input.FLB_OK, callbackResp)
 	require.Equal(t, []Message{m1}, decodeMessages(t, callbackBytes))
 	require.True(t, plugin.collectRunning.Load())
@@ -192,17 +194,17 @@ func TestInputGlobalCallbacks(t *testing.T) {
 	require.False(t, plugin.collectRunning.Load())
 	FLBPluginInputPause() // Idempotent
 
-	callbackBytes, callbackResp = testCallback(FLBPluginInputCallback)
+	callbackBytes, callbackResp = testFLBPluginInputCallback()
 	require.Equal(t, input.FLB_RETRY, callbackResp)
 	assert.Empty(t, callbackBytes)
 
 	// Resume stopped pipeline
 	FLBPluginInputResume()
-	callbackBytes, callbackResp = testCallback(FLBPluginInputCallback)
+	callbackBytes, callbackResp = testFLBPluginInputCallback()
 	require.Equal(t, input.FLB_OK, callbackResp)
 	m4 := testMessage(map[string]any{"name": "m4"})
 	plugin.enqueue(m4)()
-	callbackBytes, callbackResp = testCallback(FLBPluginInputCallback)
+	callbackBytes, callbackResp = testFLBPluginInputCallback()
 	require.Equal(t, input.FLB_OK, callbackResp)
 	require.Equal(t, []Message{m4}, decodeMessages(t, callbackBytes))
 
@@ -440,7 +442,7 @@ func TestInputCallbackCtrlC(t *testing.T) {
 	timeout := time.After(1 * time.Second)
 
 	go func() {
-		testCallback(inst.inputCallback)
+		testInputCallback(inst)
 		close(cdone)
 	}()
 
@@ -489,11 +491,11 @@ func TestInputCallbackDangle(t *testing.T) {
 		ticker := time.NewTicker(collectInterval)
 		defer ticker.Stop()
 
-		testCallback(inst.inputCallback)
+		testInputCallback(inst)
 		for {
 			select {
 			case <-ticker.C:
-				testCallback(inst.inputCallback)
+				testInputCallback(inst)
 			case <-cdone:
 				return
 			}
@@ -556,7 +558,7 @@ func TestInputCallbackInfinite(t *testing.T) {
 		for {
 			select {
 			case <-ticker.C:
-				if out, _ := testCallback(inst.inputCallback); len(out) > 0 {
+				if out, _ := testInputCallback(inst); len(out) > 0 {
 					close(cdone)
 					return
 				}
@@ -627,7 +629,7 @@ func TestInputCallbackLatency(t *testing.T) {
 		ticker := time.NewTicker(collectInterval)
 		defer ticker.Stop()
 
-		buf, _ := testCallback(inst.inputCallback)
+		buf, _ := testInputCallback(inst)
 		if len(buf) > 0 {
 			cmsg <- buf
 		}
@@ -639,7 +641,7 @@ func TestInputCallbackLatency(t *testing.T) {
 				t.Log("---- collect done")
 				return
 			case <-ticker.C:
-				buf, _ := testCallback(inst.inputCallback)
+				buf, _ := testInputCallback(inst)
 				if len(buf) > 0 {
 					cmsg <- buf
 				}
@@ -743,13 +745,13 @@ func TestInputCallbackInfiniteConcurrent(t *testing.T) {
 		ticker := time.NewTicker(time.Second * 1)
 		defer ticker.Stop()
 
-		testCallback(inst.inputCallback)
+		testInputCallback(inst)
 		close(cstarted)
 
 		for {
 			select {
 			case <-ticker.C:
-				testCallback(inst.inputCallback)
+				testInputCallback(inst)
 			case <-inst.runCtx.Done():
 				return
 			}
