@@ -39,6 +39,10 @@ var (
 	currInstanceMu sync.Mutex
 	// Current instance of the plugin, used by functions called from fluent-bit like FLBPluginInit.
 	currInstance *pluginInstance
+
+	// setupInstanceForTesting is only for unit testing, and is used to set up newly created
+	// global pluginInstance when testing calls to FLBPluginInit.
+	setupInstanceForTesting func(*pluginInstance)
 )
 
 func init() {

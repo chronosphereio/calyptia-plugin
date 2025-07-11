@@ -22,6 +22,41 @@ import (
 	"github.com/calyptia/plugin/metric"
 )
 
+// TestMain wraps all tests to clean up any calls that mutated globals via public FLB* functions.
+func TestMain(m *testing.M) {
+	cleanupDone := make(chan struct{})
+	defer func() {
+		// Cleanup in a goroutine since buggy plugins or code might indefinitely block
+		go func() {
+			defer close(cleanupDone)
+
+			setupInstanceForTesting = nil
+
+			currInstanceMu.Lock()
+			defer currInstanceMu.Unlock()
+
+			if currInstance != nil {
+				if currInstance.meta.output != nil {
+					FLBPluginOutputPreExit()
+				}
+				FLBPluginExit()
+			}
+			if pluginMeta.Load() != nil {
+				pluginMeta.Store(nil)
+			}
+		}()
+
+		// Ensure cleanup finished
+		select {
+		case <-cleanupDone:
+		case <-time.After(2 * time.Second):
+			panic("timed out cleaning up global plugin instance")
+		}
+	}()
+
+	m.Run()
+}
+
 func newTestInputInstance(t testing.TB, input InputPlugin) *pluginInstance {
 	inst := pluginInstanceWithFakes(newPluginInstance(pluginMetadata{
 		name:  "test-plugin",
@@ -78,7 +113,7 @@ func TestInputCallbackLifecycle(t *testing.T) {
 	require.Equal(t, int64(1), plugin.initCount.Load(), "initialization should only run once")
 
 	// Early attempt to callback
-	_, callbackResp := testCallback(inst)
+	_, callbackResp := testCallback(inst.inputCallback)
 	require.Equal(t, input.FLB_RETRY, callbackResp, "pre-run must be called before callback")
 
 	// Pre-run
@@ -93,7 +128,7 @@ func TestInputCallbackLifecycle(t *testing.T) {
 	require.ErrorContains(t, inst.resume(), `invalid plugin state "runnable"`)
 
 	// Callback
-	callbackBytes, callbackResp := testCallback(inst)
+	callbackBytes, callbackResp := testCallback(inst.inputCallback)
 	require.Equal(t, input.FLB_OK, callbackResp)
 	require.Equal(t, []Message{m1, m2}, decodeMessages(t, callbackBytes))
 	require.True(t, plugin.collectRunning.Load())
@@ -108,26 +143,90 @@ func TestInputCallbackLifecycle(t *testing.T) {
 	require.False(t, plugin.collectRunning.Load())
 	require.NoError(t, inst.stop(), "stop should be idempotent")
 
-	callbackBytes, callbackResp = testCallback(inst)
+	callbackBytes, callbackResp = testCallback(inst.inputCallback)
 	require.Equal(t, input.FLB_RETRY, callbackResp)
 	assert.Empty(t, callbackBytes)
 
 	// Resume stopped pipeline
 	require.NoError(t, inst.resume())
 	require.ErrorContains(t, inst.resume(), `invalid plugin state "runnable"`)
-	callbackBytes, callbackResp = testCallback(inst)
+	callbackBytes, callbackResp = testCallback(inst.inputCallback)
 	require.Equal(t, input.FLB_OK, callbackResp)
 	assert.Empty(t, callbackBytes, "m3 message from earlier not dequeued")
 	require.Eventually(t, plugin.collectRunning.Load, time.Second, time.Millisecond,
 		"collect background loop should have started running")
 	m4 := testMessage(map[string]any{"name": "m4"})
 	plugin.enqueue(m4)()
-	callbackBytes, callbackResp = testCallback(inst)
+	callbackBytes, callbackResp = testCallback(inst.inputCallback)
 	require.Equal(t, input.FLB_OK, callbackResp)
 	require.Equal(t, []Message{m4}, decodeMessages(t, callbackBytes))
 
 	// Stop again
 	require.NoError(t, inst.stop())
+	require.False(t, plugin.collectRunning.Load())
+}
+
+// TestGlobalCallbacks is a simplified variant of TestInputCallbackLifecycle that uses the
+// C callback functions invoked by fluent-bit.
+func TestGlobalCallbacks(t *testing.T) {
+	plugin := newTestInputPlugin()
+
+	// Registration
+	RegisterInput("test-name", "test-desc", plugin)
+	FLBPluginRegister(unsafe.Pointer(&input.FLBPluginProxyDef{}))
+
+	require.Equal(t, &pluginMetadata{
+		name:  "test-name",
+		desc:  "test-desc",
+		input: plugin,
+	}, pluginMeta.Load())
+
+	// Initialization
+	setupInstanceForTesting = func(inst *pluginInstance) {
+		pluginInstanceWithFakes(inst)
+	}
+	FLBPluginInit(nil)
+	require.Equal(t, int64(1), plugin.initCount.Load())
+
+	currInstanceMu.Lock()
+	inst := currInstance
+	currInstanceMu.Unlock()
+	require.NotNil(t, inst)
+
+	// Pre-run
+	FLBPluginInputPreRun(0)
+	require.Eventually(t, plugin.collectRunning.Load, time.Second, time.Millisecond,
+		"collect background loop should have started running")
+	m1 := testMessage(map[string]any{"name": "m1"})
+	plugin.enqueue(m1)()
+
+	// Callback
+	callbackBytes, callbackResp := testCallback(FLBPluginInputCallback)
+	require.Equal(t, input.FLB_OK, callbackResp)
+	require.Equal(t, []Message{m1}, decodeMessages(t, callbackBytes))
+	require.True(t, plugin.collectRunning.Load())
+
+	// Pause
+	FLBPluginInputPause()
+	require.False(t, plugin.collectRunning.Load())
+	FLBPluginInputPause() // Idempotent
+
+	callbackBytes, callbackResp = testCallback(FLBPluginInputCallback)
+	require.Equal(t, input.FLB_RETRY, callbackResp)
+	assert.Empty(t, callbackBytes)
+
+	// Resume stopped pipeline
+	FLBPluginInputResume()
+	callbackBytes, callbackResp = testCallback(FLBPluginInputCallback)
+	require.Equal(t, input.FLB_OK, callbackResp)
+	m4 := testMessage(map[string]any{"name": "m4"})
+	plugin.enqueue(m4)()
+	callbackBytes, callbackResp = testCallback(FLBPluginInputCallback)
+	require.Equal(t, input.FLB_OK, callbackResp)
+	require.Equal(t, []Message{m4}, decodeMessages(t, callbackBytes))
+
+	// Stop again
+	FLBPluginExit()
 	require.False(t, plugin.collectRunning.Load())
 }
 
@@ -232,7 +331,7 @@ func TestInputCallbackCtrlC(t *testing.T) {
 	timeout := time.After(1 * time.Second)
 
 	go func() {
-		testCallback(inst)
+		testCallback(inst.inputCallback)
 		close(cdone)
 	}()
 
@@ -281,11 +380,11 @@ func TestInputCallbackDangle(t *testing.T) {
 		ticker := time.NewTicker(collectInterval)
 		defer ticker.Stop()
 
-		testCallback(inst)
+		testCallback(inst.inputCallback)
 		for {
 			select {
 			case <-ticker.C:
-				testCallback(inst)
+				testCallback(inst.inputCallback)
 			case <-cdone:
 				return
 			}
@@ -349,7 +448,7 @@ func TestInputCallbackInfinite(t *testing.T) {
 		for {
 			select {
 			case <-ticker.C:
-				testCallback(inst)
+				testCallback(inst.inputCallback)
 				if ptr != nil {
 					close(cdone)
 					return
@@ -421,7 +520,7 @@ func TestInputCallbackLatency(t *testing.T) {
 		ticker := time.NewTicker(collectInterval)
 		defer ticker.Stop()
 
-		buf, _ := testCallback(inst)
+		buf, _ := testCallback(inst.inputCallback)
 		if len(buf) > 0 {
 			cmsg <- buf
 		}
@@ -433,7 +532,7 @@ func TestInputCallbackLatency(t *testing.T) {
 				t.Log("---- collect done")
 				return
 			case <-ticker.C:
-				buf, _ := testCallback(inst)
+				buf, _ := testCallback(inst.inputCallback)
 				if len(buf) > 0 {
 					cmsg <- buf
 				}
@@ -537,13 +636,13 @@ func TestInputCallbackInfiniteConcurrent(t *testing.T) {
 		ticker := time.NewTicker(time.Second * 1)
 		defer ticker.Stop()
 
-		testCallback(inst)
+		testCallback(inst.inputCallback)
 		close(cstarted)
 
 		for {
 			select {
 			case <-ticker.C:
-				testCallback(inst)
+				testCallback(inst.inputCallback)
 			case <-inst.runCtx.Done():
 				return
 			}

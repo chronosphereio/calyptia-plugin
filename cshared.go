@@ -99,6 +99,9 @@ func FLBPluginInit(ptr unsafe.Pointer) (respCode int) {
 
 	if currInstance == nil {
 		currInstance = newPluginInstance(*meta)
+		if setupInstanceForTesting != nil {
+			setupInstanceForTesting(currInstance)
+		}
 	}
 
 	if err := currInstance.init(ptr); err != nil {
@@ -470,11 +473,11 @@ func makeMetrics(cmp *cmetrics.Context) Metrics {
 
 // testCallback invokes the callback and returns the bytes outputted from it.
 // This cannot be in the test file since test files can't use CGO.
-func testCallback(inst *pluginInstance) ([]byte, int) {
+func testCallback(callbackFunc func(data *unsafe.Pointer, csize *C.size_t) int) ([]byte, int) {
 	data := unsafe.Pointer(nil)
 	var csize C.size_t
 
-	retCode := inst.inputCallback(&data, &csize)
+	retCode := callbackFunc(&data, &csize)
 
 	if data == nil {
 		return []byte{}, retCode
