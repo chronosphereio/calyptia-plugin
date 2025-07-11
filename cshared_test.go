@@ -13,11 +13,414 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/alecthomas/assert/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/vmihailenco/msgpack/v5"
 
+	"github.com/calyptia/cmetrics-go"
+	"github.com/calyptia/plugin/input"
 	"github.com/calyptia/plugin/metric"
 )
+
+func newTestInputInstance(t testing.TB, input InputPlugin) *pluginInstance {
+	inst := pluginInstanceWithFakes(newPluginInstance(pluginMetadata{
+		name:  "test-plugin",
+		desc:  "test plugin",
+		input: input,
+	}))
+	t.Cleanup(func() {
+		stopErr := make(chan error)
+		go func() {
+			stopErr <- inst.stop()
+		}()
+
+		select {
+		case err := <-stopErr:
+			assert.NoError(t, err)
+			return
+		case <-time.After(time.Second):
+			require.Fail(t, "timed out waiting for instance to stop")
+		}
+	})
+
+	return inst
+}
+
+func newTestOutputInstance(t testing.TB, output OutputPlugin) *pluginInstance {
+	inst := pluginInstanceWithFakes(newPluginInstance(pluginMetadata{
+		name:   "test-plugin",
+		desc:   "test plugin",
+		output: output,
+	}))
+	t.Cleanup(func() {
+		stopErr := make(chan error, 2)
+		go func() {
+			stopErr <- inst.stop()
+		}()
+
+		select {
+		case err := <-stopErr:
+			assert.NoError(t, err)
+			return
+		case <-time.After(time.Second):
+			require.Fail(t, "timed out waiting for instance to stop")
+		}
+	})
+
+	return inst
+}
+
+func pluginInstanceWithFakes(inst *pluginInstance) *pluginInstance {
+	return inst.
+		withCMetricsContextProvider(func(_ unsafe.Pointer) (*cmetrics.Context, error) {
+			return cmetrics.NewContext()
+		}).
+		withConfigLoaderProvider(func(_ unsafe.Pointer) ConfigLoader {
+			return fakeConfigLoader{}
+		})
+}
+
+func TestInputCallbackLifecycle(t *testing.T) {
+	plugin := newTestInputPlugin()
+	inst := newTestInputInstance(t, plugin)
+
+	// Initialization
+	require.NoError(t, inst.init(nil))
+	require.Equal(t, int64(1), plugin.initCount.Load())
+
+	require.ErrorContains(t, inst.init(nil), `unexpected plugin state "initialized"`)
+	require.Equal(t, int64(1), plugin.initCount.Load(), "initialization should only run once")
+
+	// Early attempt to callback
+	_, err := testInputCallback(inst)
+	require.ErrorIs(t, err, retryableError{})
+	require.ErrorContains(t, err, `unexpected plugin state "initialized"`)
+
+	// Pre-run
+	require.NoError(t, inst.resume())
+	require.Eventually(t, plugin.collectRunning.Load, time.Second, time.Millisecond,
+		"collect background loop should have started running")
+	m1 := testMessage(map[string]any{"name": "m1"})
+	m2 := testMessage(map[string]any{"name": "m2"})
+	plugin.enqueue(m1)()
+	plugin.enqueue(m2)()
+
+	require.ErrorContains(t, inst.resume(), `invalid plugin state "runnable"`)
+
+	// Callback
+	callbackBytes, err := testInputCallback(inst)
+	require.NoError(t, err)
+	require.Equal(t, []Message{m1, m2}, decodeMessages(t, callbackBytes))
+	require.True(t, plugin.collectRunning.Load())
+
+	// Stop (ensuring collect loop exits cleanly)
+	plugin.onCollectDone = func(ch chan<- Message) {
+		// Keep enqueueing after stop to ensure the plugin message channel wasn't closed early
+		time.Sleep(10 * time.Millisecond)
+		ch <- testMessage(map[string]any{"name": "m3"})
+	}
+	require.NoError(t, inst.stop())
+	require.False(t, plugin.collectRunning.Load())
+	require.NoError(t, inst.stop(), "stop should be idempotent")
+
+	callbackBytes, err = testInputCallback(inst)
+	require.ErrorIs(t, err, retryableError{})
+	require.ErrorContains(t, err, `unexpected plugin state "initialized"`)
+	assert.Empty(t, callbackBytes)
+
+	// Resume stopped pipeline
+	require.NoError(t, inst.resume())
+	require.ErrorContains(t, inst.resume(), `invalid plugin state "runnable"`)
+	callbackBytes, err = testInputCallback(inst)
+	require.NoError(t, err)
+	assert.Empty(t, callbackBytes, "m3 message from earlier not dequeued")
+	require.Eventually(t, plugin.collectRunning.Load, time.Second, time.Millisecond,
+		"collect background loop should have started running")
+	m4 := testMessage(map[string]any{"name": "m4"})
+	plugin.enqueue(m4)()
+	callbackBytes, err = testInputCallback(inst)
+	require.NoError(t, err)
+	require.Equal(t, []Message{m4}, decodeMessages(t, callbackBytes))
+
+	// Stop again
+	require.NoError(t, inst.stop())
+	require.False(t, plugin.collectRunning.Load())
+}
+
+// TestInputGlobalCallbacks is a simplified variant of TestInputCallbackLifecycle that uses the
+// C callback functions invoked by fluent-bit.
+func TestInputGlobalCallbacks(t *testing.T) {
+	t.Cleanup(resetGlobalState)
+
+	plugin := newTestInputPlugin()
+
+	// Registration
+	RegisterInput("test-name", "test-desc", plugin)
+	FLBPluginRegister(unsafe.Pointer(&input.FLBPluginProxyDef{}))
+
+	require.Equal(t, &pluginMetadata{
+		name:  "test-name",
+		desc:  "test-desc",
+		input: plugin,
+	}, pluginMeta.Load())
+
+	// Initialization
+	setupInstanceForTesting = func(inst *pluginInstance) {
+		pluginInstanceWithFakes(inst)
+	}
+	FLBPluginInit(nil)
+	require.Equal(t, int64(1), plugin.initCount.Load())
+
+	currInstanceMu.Lock()
+	inst := currInstance
+	currInstanceMu.Unlock()
+	require.NotNil(t, inst)
+
+	// Pre-run
+	FLBPluginInputPreRun(0)
+	require.Eventually(t, plugin.collectRunning.Load, time.Second, time.Millisecond,
+		"collect background loop should have started running")
+	m1 := testMessage(map[string]any{"name": "m1"})
+	plugin.enqueue(m1)()
+
+	// Callback
+	callbackBytes, callbackResp := testFLBPluginInputCallback()
+	require.Equal(t, input.FLB_OK, callbackResp)
+	require.Equal(t, []Message{m1}, decodeMessages(t, callbackBytes))
+	require.True(t, plugin.collectRunning.Load())
+
+	// Pause
+	FLBPluginInputPause()
+	require.False(t, plugin.collectRunning.Load())
+	FLBPluginInputPause() // Idempotent
+
+	callbackBytes, callbackResp = testFLBPluginInputCallback()
+	require.Equal(t, input.FLB_RETRY, callbackResp)
+	assert.Empty(t, callbackBytes)
+
+	// Resume stopped pipeline
+	FLBPluginInputResume()
+	callbackBytes, callbackResp = testFLBPluginInputCallback()
+	require.Equal(t, input.FLB_OK, callbackResp)
+	m4 := testMessage(map[string]any{"name": "m4"})
+	plugin.enqueue(m4)()
+	callbackBytes, callbackResp = testFLBPluginInputCallback()
+	require.Equal(t, input.FLB_OK, callbackResp)
+	require.Equal(t, []Message{m4}, decodeMessages(t, callbackBytes))
+
+	// Stop again
+	FLBPluginExit()
+	require.False(t, plugin.collectRunning.Load())
+	require.Equal(t, input.FLB_OK, FLBPluginExit()) // Idempotent
+}
+
+// TestOutputCallbackLifecycle is a simplified variant of TestOutputCallbackLifecycle that uses the
+// C callback functions invoked by fluent-bit.
+func TestOutputCallbackLifecycle(t *testing.T) {
+	plugin := newTestOutputPlugin()
+	inst := newTestOutputInstance(t, plugin)
+
+	// Initialization
+	require.NoError(t, inst.init(nil))
+	require.Equal(t, int64(1), plugin.initCount.Load())
+
+	require.ErrorContains(t, inst.init(nil), `unexpected plugin state "initialized"`)
+	require.Equal(t, int64(1), plugin.initCount.Load(), "initialization should only run once")
+
+	// Early attempt to flush
+	require.ErrorContains(t, inst.outputFlush("", nil), `invalid plugin state "initialized"`)
+
+	// Pre-run
+	require.NoError(t, inst.resume())
+	require.Eventually(t, plugin.flushRunning.Load, time.Second, time.Millisecond,
+		"flush background loop should have started running")
+
+	// Flush
+	m1 := testMessage(map[string]any{"name": "m1"})
+	m2 := testMessage(map[string]any{"name": "m2"})
+	require.NoError(t, inst.outputFlush("", mustMarshalMessages(t, []Message{m1, m2})))
+	require.Eventually(t, func() bool { return len(plugin.flushedMessages) == 2 }, time.Second, time.Millisecond)
+	require.Equal(t, []Message{m1, m2}, []Message{<-plugin.flushedMessages, <-plugin.flushedMessages})
+
+	m3 := testMessage(map[string]any{"name": "m3"})
+	require.NoError(t, inst.outputFlush("", mustMarshalMessages(t, []Message{m3})))
+	require.Eventually(t, func() bool { return len(plugin.flushedMessages) == 1 }, time.Second, time.Millisecond)
+	require.Equal(t, []Message{m3}, []Message{<-plugin.flushedMessages})
+
+	require.ErrorContains(t, inst.resume(), `invalid plugin state "runnable"`)
+
+	// Pre-exit
+	require.NoError(t, inst.outputPreExit())
+	require.False(t, plugin.flushRunning.Load())
+	require.NoError(t, inst.outputPreExit(), "outputPreExit should be idempotent")
+
+	// Exit
+	require.NoError(t, inst.stop())
+	require.NoError(t, inst.stop(), "stop should be idempotent")
+}
+
+func TestOutputGlobalCallbacks(t *testing.T) {
+	t.Cleanup(resetGlobalState)
+
+	plugin := newTestOutputPlugin()
+
+	// Registration
+	RegisterOutput("test-name", "test-desc", plugin)
+	FLBPluginRegister(unsafe.Pointer(&input.FLBPluginProxyDef{}))
+
+	require.Equal(t, &pluginMetadata{
+		name:   "test-name",
+		desc:   "test-desc",
+		output: plugin,
+	}, pluginMeta.Load())
+
+	// Initialization
+	setupInstanceForTesting = func(inst *pluginInstance) {
+		pluginInstanceWithFakes(inst)
+	}
+	FLBPluginInit(nil)
+	require.Equal(t, int64(1), plugin.initCount.Load())
+
+	currInstanceMu.Lock()
+	inst := currInstance
+	currInstanceMu.Unlock()
+	require.NotNil(t, inst)
+
+	// Pre-run
+	FLBPluginOutputPreRun(0)
+	require.Eventually(t, plugin.flushRunning.Load, time.Second, time.Millisecond,
+		"flush background loop should have started running")
+
+	// Flush
+	m1 := testMessage(map[string]any{"name": "m1"})
+	m2 := testMessage(map[string]any{"name": "m2"})
+	require.Equal(t, input.FLB_OK, testFLBPluginFlush(mustMarshalMessages(t, []Message{m1, m2}), ""))
+	require.Eventually(t, func() bool { return len(plugin.flushedMessages) == 2 }, time.Second, time.Millisecond)
+	require.Equal(t, []Message{m1, m2}, []Message{<-plugin.flushedMessages, <-plugin.flushedMessages})
+
+	// Pre-exit
+	FLBPluginOutputPreExit()
+	require.False(t, plugin.flushRunning.Load())
+	FLBPluginOutputPreExit() // Idempotent
+
+	// Exit
+	FLBPluginExit()
+	require.Equal(t, input.FLB_OK, FLBPluginExit()) // Idempotent
+}
+
+// testMessage returns a Message with the given record map and current timestamp.
+func testMessage(record map[string]any) Message {
+	tag := ""
+	return Message{
+		Time:   time.Now().UTC(),
+		Record: record,
+		tag:    &tag,
+	}
+}
+
+func newTestInputPlugin() *testInputPlugin {
+	return &testInputPlugin{
+		inputs: make(chan *collectMessage),
+	}
+}
+
+// testInputPlugin is an InputPlugin used to help test plugin callback and concurrency behavior.
+type testInputPlugin struct {
+	initCount      atomic.Int64            // Count of calls to Init method.
+	collectRunning atomic.Bool             // Indicates whether the Collect method is running.
+	onCollectDone  func(ch chan<- Message) // Settable callback invoked when Collect is about to return.
+
+	inputs chan *collectMessage
+}
+
+var _ InputPlugin = (*testInputPlugin)(nil)
+
+func (t *testInputPlugin) Init(ctx context.Context, fbit *Fluentbit) error {
+	t.initCount.Add(1)
+	return nil
+}
+
+func (t *testInputPlugin) Collect(ctx context.Context, ch chan<- Message) error {
+	t.collectRunning.Store(true)
+	defer t.collectRunning.Store(false)
+
+	for {
+		select {
+		case m := <-t.inputs:
+			ch <- m.msg
+			m.collectedWG.Done()
+		case <-ctx.Done():
+			if t.onCollectDone != nil {
+				t.onCollectDone(ch)
+			}
+			return nil
+		}
+	}
+}
+
+// enqueue the message m to be processed by Collect. When called, the returned function
+// blocks until a running Collect puts m on the plugin's input channel.
+func (t *testInputPlugin) enqueue(m Message) (waitForCollected func()) {
+	cm := &collectMessage{msg: m}
+	cm.collectedWG.Add(1)
+	t.inputs <- cm
+
+	return cm.collectedWG.Wait
+}
+
+// collectMessage is a helper wrapper used by testInputPlugin that wraps a Message.
+type collectMessage struct {
+	msg         Message
+	collectedWG sync.WaitGroup // Decremented to 0 when testInputPlugin Collect processes the message.
+}
+
+func decodeMessages(t testing.TB, msgpackBytes []byte) []Message {
+	var messages []Message
+
+	dec := msgpack.NewDecoder(bytes.NewReader(msgpackBytes))
+	for {
+		msg, err := decodeMsg(dec, "")
+		if errors.Is(err, io.EOF) {
+			return messages
+		}
+		require.NoError(t, err)
+
+		messages = append(messages, msg)
+	}
+}
+
+func newTestOutputPlugin() *testOutputPlugin {
+	return &testOutputPlugin{
+		flushedMessages: make(chan Message, 100),
+	}
+}
+
+type testOutputPlugin struct {
+	initCount       atomic.Int64 // Count of calls to Init method.
+	flushRunning    atomic.Bool  // Indicates whether the Flush method is running.
+	flushedMessages chan Message
+}
+
+var _ OutputPlugin = (*testOutputPlugin)(nil)
+
+func (t *testOutputPlugin) Init(ctx context.Context, fbit *Fluentbit) error {
+	t.initCount.Add(1)
+	return nil
+}
+
+func (t *testOutputPlugin) Flush(ctx context.Context, ch <-chan Message) error {
+	t.flushRunning.Store(true)
+	defer t.flushRunning.Store(false)
+
+	for {
+		select {
+		case m := <-ch:
+			t.flushedMessages <- m
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
 
 type testPluginInputCallbackCtrlC struct{}
 
@@ -29,53 +432,38 @@ func (t testPluginInputCallbackCtrlC) Collect(ctx context.Context, ch chan<- Mes
 	return nil
 }
 
-func init() {
-	registerWG.Done()
-}
-
-func TestMain(m *testing.M) {
-	defer flbPluginReset()
-	m.Run()
-}
-
 func TestInputCallbackCtrlC(t *testing.T) {
-	theInputLock.Lock()
-	theInput = testPluginInputCallbackCtrlC{}
-	theInputLock.Unlock()
+	inst := newTestInputInstance(t, testPluginInputCallbackCtrlC{})
 
-	cdone := make(chan bool)
-	timeout := time.NewTimer(1 * time.Second)
-	defer timeout.Stop()
+	require.NoError(t, inst.init(nil))
+	require.NoError(t, inst.resume())
 
-	ptr := unsafe.Pointer(nil)
-
-	// prepare channel for input explicitly.
-	prepareInputCollector(false)
+	cdone := make(chan struct{})
+	timeout := time.After(1 * time.Second)
 
 	go func() {
-		FLBPluginInputCallback(&ptr, nil)
-		cdone <- true
+		testInputCallback(inst)
+		close(cdone)
 	}()
 
 	select {
 	case <-cdone:
-		timeout.Stop()
-		runCancel()
-	case <-timeout.C:
+		inst.runCancel()
+	case <-timeout:
 		t.Fatalf("timed out ...")
 	}
 }
 
-var testPluginInputCallbackDangleFuncs atomic.Int64
+type testPluginInputCallbackDangle struct {
+	calls atomic.Int64
+}
 
-type testPluginInputCallbackDangle struct{}
-
-func (t testPluginInputCallbackDangle) Init(ctx context.Context, fbit *Fluentbit) error {
+func (t *testPluginInputCallbackDangle) Init(ctx context.Context, fbit *Fluentbit) error {
 	return nil
 }
 
-func (t testPluginInputCallbackDangle) Collect(ctx context.Context, ch chan<- Message) error {
-	testPluginInputCallbackDangleFuncs.Add(1)
+func (t *testPluginInputCallbackDangle) Collect(ctx context.Context, ch chan<- Message) error {
+	t.calls.Add(1)
 	ch <- Message{
 		Time: time.Now(),
 		Record: map[string]string{
@@ -89,56 +477,50 @@ func (t testPluginInputCallbackDangle) Collect(ctx context.Context, ch chan<- Me
 // Collect multiple times. This is inline with backward-compatible
 // behavior.
 func TestInputCallbackDangle(t *testing.T) {
-	theInputLock.Lock()
-	theInput = testPluginInputCallbackDangle{}
-	theInputLock.Unlock()
+	input := &testPluginInputCallbackDangle{}
+	inst := newTestInputInstance(t, input)
 
-	cdone := make(chan bool)
+	cdone := make(chan struct{})
 	ptr := unsafe.Pointer(nil)
 
 	// prepare channel for input explicitly.
-	prepareInputCollector(false)
+	require.NoError(t, inst.init(ptr))
+	require.NoError(t, inst.resume())
 
 	go func() {
-		t := time.NewTicker(collectInterval)
-		defer t.Stop()
+		ticker := time.NewTicker(collectInterval)
+		defer ticker.Stop()
 
-		FLBPluginInputCallback(&ptr, nil)
+		testInputCallback(inst)
 		for {
 			select {
-			case <-t.C:
-				FLBPluginInputCallback(&ptr, nil)
+			case <-ticker.C:
+				testInputCallback(inst)
 			case <-cdone:
 				return
 			}
 		}
 	}()
 
-	timeout := time.NewTimer(5 * time.Second)
+	time.Sleep(5 * time.Second)
 
-	<-timeout.C
-	timeout.Stop()
-	runCancel()
-	cdone <- true
+	inst.runCancel()
+	close(cdone)
 
-	// Test the assumption that only a single goroutine is
-	// ingesting records.
-	if testPluginInputCallbackDangleFuncs.Load() != 1 {
-		t.Fatalf("Too many callbacks: %d",
-			testPluginInputCallbackDangleFuncs.Load())
-	}
+	// Test the assumption that only a single goroutine is ingesting records.
+	require.EqualValues(t, 1, input.calls.Load())
 }
 
-var testPluginInputCallbackInfiniteFuncs atomic.Int64
+type testPluginInputCallbackInfinite struct {
+	calls atomic.Int64
+}
 
-type testPluginInputCallbackInfinite struct{}
-
-func (t testPluginInputCallbackInfinite) Init(ctx context.Context, fbit *Fluentbit) error {
+func (t *testPluginInputCallbackInfinite) Init(ctx context.Context, fbit *Fluentbit) error {
 	return nil
 }
 
-func (t testPluginInputCallbackInfinite) Collect(ctx context.Context, ch chan<- Message) error {
-	testPluginInputCallbackInfiniteFuncs.Add(1)
+func (t *testPluginInputCallbackInfinite) Collect(ctx context.Context, ch chan<- Message) error {
+	t.calls.Add(1)
 	for {
 		select {
 		default:
@@ -159,27 +541,25 @@ func (t testPluginInputCallbackInfinite) Collect(ctx context.Context, ch chan<- 
 // TestInputCallbackInfinite is a test for the main method most plugins
 // use where they do not return from the first invocation of collect.
 func TestInputCallbackInfinite(t *testing.T) {
-	theInputLock.Lock()
-	theInput = testPluginInputCallbackInfinite{}
-	theInputLock.Unlock()
+	input := &testPluginInputCallbackInfinite{}
+	inst := newTestInputInstance(t, input)
 
-	cdone := make(chan bool)
-	cshutdown := make(chan bool)
-	ptr := unsafe.Pointer(nil)
+	cdone := make(chan struct{})
+	cshutdown := make(chan struct{})
 
 	// prepare channel for input explicitly.
-	prepareInputCollector(false)
+	require.NoError(t, inst.init(nil))
+	require.NoError(t, inst.resume())
 
 	go func() {
-		t := time.NewTicker(collectInterval)
-		defer t.Stop()
+		ticker := time.NewTicker(collectInterval)
+		defer ticker.Stop()
 
 		for {
 			select {
-			case <-t.C:
-				FLBPluginInputCallback(&ptr, nil)
-				if ptr != nil {
-					cdone <- true
+			case <-ticker.C:
+				if out, _ := testInputCallback(inst); len(out) > 0 {
+					close(cdone)
 					return
 				}
 			case <-cshutdown:
@@ -188,25 +568,19 @@ func TestInputCallbackInfinite(t *testing.T) {
 		}
 	}()
 
-	timeout := time.NewTimer(10 * time.Second)
-	defer timeout.Stop()
+	timeout := time.After(10 * time.Second)
 
 	select {
 	case <-cdone:
-		runCancel()
+		inst.runCancel()
 		// make sure Collect is not being invoked after Done().
 		time.Sleep(collectInterval * 10)
-		// Test the assumption that only a single goroutine is
-		// ingesting records.
-		if testPluginInputCallbackInfiniteFuncs.Load() != 1 {
-			t.Fatalf("Too many callbacks: %d",
-				testPluginInputCallbackInfiniteFuncs.Load())
-		}
-		return
-	case <-timeout.C:
-		runCancel()
-		cshutdown <- true
-		// This test seems to fail some what frequently because the Collect goroutine
+		// Test the assumption that only a single goroutine is ingesting records.
+		require.EqualValues(t, 1, input.calls.Load())
+	case <-timeout:
+		inst.runCancel()
+		close(cshutdown)
+		// This test seems to fail somewhat frequently because the Collect goroutine
 		// inside cshared is never being scheduled.
 		t.Fatalf("timed out ...")
 	}
@@ -231,7 +605,6 @@ func (t testPluginInputCallbackLatency) Collect(ctx context.Context, ch chan<- M
 					},
 				}
 			}
-			tick.Reset(time.Second * 1)
 		case <-ctx.Done():
 			return nil
 		}
@@ -241,34 +614,34 @@ func (t testPluginInputCallbackLatency) Collect(ctx context.Context, ch chan<- M
 // TestInputCallbackInfiniteLatency is a test of the latency between
 // messages.
 func TestInputCallbackLatency(t *testing.T) {
-	theInputLock.Lock()
-	theInput = testPluginInputCallbackLatency{}
-	theInputLock.Unlock()
+	input := &testPluginInputCallbackLatency{}
+	inst := newTestInputInstance(t, input)
 
-	cdone := make(chan bool)
-	cstarted := make(chan bool)
+	cdone := make(chan struct{})
+	cstarted := make(chan struct{})
 	cmsg := make(chan []byte)
 
 	// prepare channel for input explicitly.
-	prepareInputCollector(false)
+	require.NoError(t, inst.init(nil))
+	require.NoError(t, inst.resume())
 
 	go func() {
-		t := time.NewTicker(collectInterval)
-		defer t.Stop()
+		ticker := time.NewTicker(collectInterval)
+		defer ticker.Stop()
 
-		buf, _ := testFLBPluginInputCallback()
+		buf, _ := testInputCallback(inst)
 		if len(buf) > 0 {
 			cmsg <- buf
 		}
 
-		cstarted <- true
+		close(cstarted)
 		for {
 			select {
 			case <-cdone:
-				fmt.Println("---- collect done")
+				t.Log("---- collect done")
 				return
-			case <-t.C:
-				buf, _ := testFLBPluginInputCallback()
+			case <-ticker.C:
+				buf, _ := testInputCallback(inst)
 				if len(buf) > 0 {
 					cmsg <- buf
 				}
@@ -277,10 +650,8 @@ func TestInputCallbackLatency(t *testing.T) {
 	}()
 
 	<-cstarted
-	fmt.Println("---- started")
-	timeout := time.NewTimer(5 * time.Second)
-	defer timeout.Stop()
-
+	t.Log("---- started")
+	timeout := time.After(5 * time.Second)
 	msgs := 0
 
 	for {
@@ -304,9 +675,9 @@ func TestInputCallbackLatency(t *testing.T) {
 						float64(time.Since(msg.Time)/time.Millisecond))
 				}
 			}
-		case <-timeout.C:
-			runCancel()
-			cdone <- true
+		case <-timeout:
+			inst.runCancel()
+			close(cdone)
 
 			if msgs < 128 {
 				t.Fatalf("too few messages: %d", msgs)
@@ -357,49 +728,49 @@ func (t testInputCallbackInfiniteConcurrent) Collect(ctx context.Context, ch cha
 // TestInputCallbackInfiniteConcurrent is meant to make sure we do not
 // break anythin with respect to concurrent ingest.
 func TestInputCallbackInfiniteConcurrent(t *testing.T) {
-	theInputLock.Lock()
-	theInput = testInputCallbackInfiniteConcurrent{}
-	theInputLock.Unlock()
+	input := &testInputCallbackInfiniteConcurrent{}
+	inst := newTestInputInstance(t, input)
 
-	cdone := make(chan bool)
-	cstarted := make(chan bool)
+	cdone := make(chan struct{})
+	cstarted := make(chan struct{})
 	ptr := unsafe.Pointer(nil)
 
 	concurrentWait.Add(64)
 
 	// prepare channel for input explicitly.
-	prepareInputCollector(false)
+	require.NoError(t, inst.init(ptr))
+	require.NoError(t, inst.resume())
 
-	go func(cstarted chan bool) {
+	go func() {
 		ticker := time.NewTicker(time.Second * 1)
 		defer ticker.Stop()
 
-		FLBPluginInputCallback(&ptr, nil)
-		cstarted <- true
+		testInputCallback(inst)
+		close(cstarted)
 
 		for {
 			select {
 			case <-ticker.C:
-				FLBPluginInputCallback(&ptr, nil)
-			case <-runCtx.Done():
+				testInputCallback(inst)
+			case <-inst.runCtx.Done():
 				return
 			}
 		}
-	}(cstarted)
+	}()
 
 	go func() {
 		concurrentWait.Wait()
-		cdone <- true
+		close(cdone)
 	}()
 
 	<-cstarted
-	timeout := time.NewTimer(10 * time.Second)
+	timeout := time.After(10 * time.Second)
 
 	select {
 	case <-cdone:
-		runCancel()
-	case <-timeout.C:
-		runCancel()
+		inst.runCancel()
+	case <-timeout:
+		inst.runCancel()
 		// this test seems to timeout semi-frequently... need to get to
 		// the bottom of it...
 		t.Fatalf("---- timed out: %d/%d ...",
@@ -560,28 +931,28 @@ func TestOutputFlush(t *testing.T) {
 
 	now := time.Now().UTC()
 
-	out := testOutputHandlerReflect{
+	out := &testOutputHandlerReflect{
 		Test: t,
 		Check: func(t *testing.T, msg Message) error {
 			defer wg.Done()
 
-			assert.Equal(t, now, msg.Time)
-
-			record := assertType[map[string]any](t, msg.Record)
-
-			foo := assertType[string](t, record["foo"])
-			assert.Equal(t, "bar", foo)
-
-			bar := assertType[int8](t, record["bar"])
-			assert.Equal(t, 3, bar)
-
-			foobar := assertType[float64](t, record["foobar"])
-			assert.Equal(t, 1.337, foobar)
+			expectTag := "foobar"
+			assert.Equal(t, Message{
+				Time: now,
+				Record: map[string]any{
+					"foo":    "bar",
+					"bar":    int8(3),
+					"foobar": 1.337,
+				},
+				tag: &expectTag,
+			}, msg)
 
 			return nil
 		},
 	}
-	_ = prepareOutputFlush(&out)
+	inst := newTestOutputInstance(t, out)
+	require.NoError(t, inst.init(nil))
+	require.NoError(t, inst.resume())
 
 	msg := Message{
 		Time: now,
@@ -599,17 +970,55 @@ func TestOutputFlush(t *testing.T) {
 	assert.NoError(t, err)
 
 	wg.Add(1)
-	assert.NoError(t, pluginFlush("foobar", b))
+	assert.NoError(t, inst.outputFlush("foobar", b))
 	wg.Wait()
 }
 
-func assertType[T any](tb testing.TB, got any) T {
-	tb.Helper()
+type fakeConfigLoader map[string]string
 
-	var want T
+var _ ConfigLoader = (fakeConfigLoader)(nil)
 
-	v, ok := got.(T)
-	assert.True(tb, ok, "Expected types to be equal:\n-%T\n+%T", want, got)
+func (f fakeConfigLoader) String(key string) string {
+	return f[key]
+}
 
-	return v
+func mustMarshalMessages(t testing.TB, msgs []Message) []byte {
+	var buf bytes.Buffer
+	for _, msg := range msgs {
+		b, err := marshalMsg(msg)
+		require.NoError(t, err)
+		buf.Write(b)
+	}
+	return buf.Bytes()
+}
+
+// resetGlobalState resets global plugin state. Intended for use by tests that call stateless FLB* functions.
+func resetGlobalState() {
+	cleanupDone := make(chan struct{})
+	go func() {
+		defer close(cleanupDone)
+
+		setupInstanceForTesting = nil
+
+		currInstanceMu.Lock()
+		defer currInstanceMu.Unlock()
+
+		if currInstance != nil {
+			if currInstance.meta.output != nil {
+				FLBPluginOutputPreExit()
+			}
+			FLBPluginExit()
+		}
+		if pluginMeta.Load() != nil {
+			registerWG.Add(1)
+			pluginMeta.Store(nil)
+		}
+	}()
+
+	// Ensure cleanup finished
+	select {
+	case <-cleanupDone:
+	case <-time.After(2 * time.Second):
+		panic("timed out cleaning up global plugin instance")
+	}
 }

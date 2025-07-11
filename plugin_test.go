@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -16,6 +17,9 @@ import (
 	"github.com/alecthomas/assert/v2"
 	"github.com/ory/dockertest/v3"
 	dc "github.com/ory/dockertest/v3/docker"
+	"github.com/stretchr/testify/require"
+
+	"github.com/calyptia/plugin/input"
 )
 
 func TestPlugin(t *testing.T) {
@@ -174,4 +178,10 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		t.Fatal("timeout exceeded")
 	}
+}
+
+func TestFlbReturnCode(t *testing.T) {
+	require.Equal(t, input.FLB_OK, flbReturnCode(nil))
+	require.Equal(t, input.FLB_ERROR, flbReturnCode(fmt.Errorf("hello")))
+	require.Equal(t, input.FLB_RETRY, flbReturnCode(retryableError{fmt.Errorf("hello")}))
 }
