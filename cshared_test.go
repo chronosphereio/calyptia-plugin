@@ -544,10 +544,9 @@ func TestInputCallbackInfinite(t *testing.T) {
 
 	cdone := make(chan struct{})
 	cshutdown := make(chan struct{})
-	ptr := unsafe.Pointer(nil)
 
 	// prepare channel for input explicitly.
-	require.NoError(t, inst.init(ptr))
+	require.NoError(t, inst.init(nil))
 	require.NoError(t, inst.resume())
 
 	go func() {
@@ -557,8 +556,7 @@ func TestInputCallbackInfinite(t *testing.T) {
 		for {
 			select {
 			case <-ticker.C:
-				testCallback(inst.inputCallback)
-				if ptr != nil {
+				if out, _ := testCallback(inst.inputCallback); len(out) > 0 {
 					close(cdone)
 					return
 				}
