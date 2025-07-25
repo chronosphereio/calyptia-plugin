@@ -30,7 +30,7 @@ import (
 	cmetrics "github.com/calyptia/cmetrics-go"
 )
 
-// Define constants matching Fluent Bit core
+// Define constants matching Fluent Bit core.
 const (
 	FLB_ERROR = C.FLB_ERROR
 	FLB_OK    = C.FLB_OK
@@ -65,7 +65,7 @@ func FLBPluginRegister(def unsafe.Pointer, name, desc string) int {
 	return 0
 }
 
-// FLBPluginUnregister release resources allocated by the plugin initialization
+// FLBPluginUnregister release resources allocated by the plugin initialization.
 func FLBPluginUnregister(def unsafe.Pointer) {
 	p := (*FLBPluginProxyDef)(def)
 	C.free(unsafe.Pointer(p.name))

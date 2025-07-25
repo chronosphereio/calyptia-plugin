@@ -135,7 +135,8 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var err error
-	if theInput != nil {
+	switch {
+	case theInput != nil:
 		defer cancel()
 		conf := &flbInputConfigLoader{ptr: ptr}
 		cmt, err = input.FLBPluginGetCMetricsContext(ptr)
@@ -151,12 +152,11 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 
 		err = theInput.Init(ctx, fbit)
 		if maxbuffered := fbit.Conf.String("go.MaxBufferedMessages"); maxbuffered != "" {
-			maxbuffered, err := strconv.Atoi(maxbuffered)
-			if err != nil {
+			if maxbuffered, errbuf := strconv.Atoi(maxbuffered); errbuf != nil {
 				maxBufferedMessages = maxbuffered
 			}
 		}
-	} else if theOutput != nil {
+	case theOutput != nil:
 		defer cancel()
 		conf := &flbOutputConfigLoader{ptr: ptr}
 		cmt, err = output.FLBPluginGetCMetricsContext(ptr)
@@ -170,8 +170,7 @@ func FLBPluginInit(ptr unsafe.Pointer) int {
 			Logger:  logger,
 		}
 		err = theOutput.Init(ctx, fbit)
-	} else {
-		// intended to longer liveness for custom plugin
+	default:
 		runCancel = cancel
 		conf := &flbCustomConfigLoader{ptr: ptr}
 		logger = &flbCustomLogger{ptr: ptr}
@@ -229,7 +228,7 @@ func prepareOutputFlush(output OutputPlugin) error {
 // Lock used to synchronize access to theInput variable.
 var theInputLock sync.Mutex
 
-// prepareInputCollector is meant to prepare resources for input collectors
+// prepareInputCollector is meant to prepare resources for input collectors.
 func prepareInputCollector(multiInstance bool) {
 	runCtx, runCancel = context.WithCancel(context.Background())
 	if !multiInstance {
@@ -505,16 +504,16 @@ func decodeMsg(dec *msgpack.Decoder, tag string) (Message, error) {
 	eventTime := &EventTime{}
 	if err := msgpack.Unmarshal(entry[0], &eventTime); err != nil {
 		var eventWithMetadata []msgpack.RawMessage // for Fluent Bit V2 metadata type of format
-		if err := msgpack.Unmarshal(entry[0], &eventWithMetadata); err != nil {
-			return out, fmt.Errorf("msgpack unmarshal event with metadata: %w", err)
+		if err = msgpack.Unmarshal(entry[0], &eventWithMetadata); err != nil {
+			return out, fmt.Errorf("msgpack unmarshal event with metadata: %w", errmsgpack)
 		}
 
 		if len(eventWithMetadata) < 1 {
 			return out, fmt.Errorf("msgpack unmarshal event time with metadata: expected 1 element, got %d", len(eventWithMetadata))
 		}
 
-		if err := msgpack.Unmarshal(eventWithMetadata[0], &eventTime); err != nil {
-			return out, fmt.Errorf("msgpack unmarshal event time with metadata: %w", err)
+		if errunpack := msgpack.Unmarshal(eventWithMetadata[0], &eventTime); errunpack != nil {
+			return out, fmt.Errorf("msgpack unmarshal event time with metadata: %w", errunpack)
 		}
 
 		return out, fmt.Errorf("msgpack unmarshal event time: %w", err)
@@ -525,7 +524,7 @@ func decodeMsg(dec *msgpack.Decoder, tag string) (Message, error) {
 		return out, fmt.Errorf("msgpack unmarshal event record: %w", err)
 	}
 
-	out.Time = eventTime.Time.UTC()
+	out.Time = eventTime.UTC()
 	out.Record = record
 	out.tag = &tag
 

@@ -52,7 +52,7 @@ func NewLoader(fr FileReader) *Loader {
 // parseConfig reads the content of the given config path and parses it into a fluentbit configuration object.
 func (cl *Loader) parseConfig(path string) (*fluentbitconfig.Config, error) {
 	// Read the content from the given path using the FileReader
-	content, err := cl.FileReader.ReadFile(path)
+	content, err := cl.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("error reading file %s: %v", path, err)
 	}
@@ -126,6 +126,7 @@ func (cl *Loader) LoadFromFiles(configFiles ...string) *CalyptiaConfig {
 			parsedURL, err := url.Parse(host)
 			if err == nil {
 				fullURL := parsedURL.Scheme + "://" + parsedURL.Hostname()
+				//nolint:staticcheck // override the check for de morgan's law for now.
 				if !(calyptiaConfig.TLS && parsedURL.Port() == "443" || !calyptiaConfig.TLS && parsedURL.Port() == "80") && parsedURL.Port() != "" {
 					fullURL += ":" + parsedURL.Port()
 				}
