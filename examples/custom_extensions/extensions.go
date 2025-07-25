@@ -12,7 +12,7 @@ func init() {
 }
 
 type extensionsPlugin struct {
-	log          plugin.Logger
+	log plugin.Logger
 }
 
 const (

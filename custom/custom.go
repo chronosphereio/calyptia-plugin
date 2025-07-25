@@ -46,7 +46,6 @@ type (
 // is passed and the next step is to invoke this FLBPluginRegister() function
 // to fill the required information: type, proxy type, flags name and
 // description.
-//
 func FLBPluginRegister(def unsafe.Pointer, name, desc string) int {
 	p := (*FLBPluginProxyDef)(def)
 	p._type = FLB_PROXY_CUSTOM_PLUGIN

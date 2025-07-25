@@ -506,15 +506,15 @@ func decodeMsg(dec *msgpack.Decoder, tag string) (Message, error) {
 	if err := msgpack.Unmarshal(entry[0], &eventTime); err != nil {
 		var eventWithMetadata []msgpack.RawMessage // for Fluent Bit V2 metadata type of format
 		if err = msgpack.Unmarshal(entry[0], &eventWithMetadata); err != nil {
-			return out, fmt.Errorf("msgpack unmarshal event with metadata: %w", errmsgpack)
+			return out, fmt.Errorf("msgpack unmarshal event with metadata: %w", err)
 		}
 
 		if len(eventWithMetadata) < 1 {
 			return out, fmt.Errorf("msgpack unmarshal event time with metadata: expected 1 element, got %d", len(eventWithMetadata))
 		}
 
-		if errunpack := msgpack.Unmarshal(eventWithMetadata[0], &eventTime); errunpack != nil {
-			return out, fmt.Errorf("msgpack unmarshal event time with metadata: %w", errunpack)
+		if err = msgpack.Unmarshal(eventWithMetadata[0], &eventTime); err != nil {
+			return out, fmt.Errorf("msgpack unmarshal event time with metadata: %w", err)
 		}
 
 		return out, fmt.Errorf("msgpack unmarshal event time: %w", err)
@@ -673,8 +673,10 @@ func makeMetrics(cmp *cmetrics.Context) Metrics {
 	}
 }
 
-var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
-var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
+var (
+	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
+)
 
 // toSnakeCase converts a camelCase string to snake_case.
 // Taken from https://stackoverflow.com/questions/56616196/how-to-convert-camel-case-string-to-snake-case.
