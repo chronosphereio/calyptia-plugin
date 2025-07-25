@@ -504,7 +504,7 @@ func decodeMsg(dec *msgpack.Decoder, tag string) (Message, error) {
 	eventTime := &EventTime{}
 	if err := msgpack.Unmarshal(entry[0], &eventTime); err != nil {
 		var eventWithMetadata []msgpack.RawMessage // for Fluent Bit V2 metadata type of format
-		if errmsgpack := msgpack.Unmarshal(entry[0], &eventWithMetadata); errmsgpack != nil {
+		if err = msgpack.Unmarshal(entry[0], &eventWithMetadata); err != nil {
 			return out, fmt.Errorf("msgpack unmarshal event with metadata: %w", errmsgpack)
 		}
 
