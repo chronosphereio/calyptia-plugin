@@ -41,7 +41,8 @@ func testPlugin(t *testing.T, pool *dockertest.Pool) {
 	}()
 
 	// Set permissions on the file to be writable
-	err = os.Chmod(f.Name(), 0o600)
+	//nolint:gosec //must allow container to read output.txt
+	err = os.Chmod(f.Name(), 0o777)
 	assert.NoError(t, err)
 
 	buildOpts := dc.BuildImageOptions{
