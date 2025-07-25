@@ -617,3 +617,33 @@ func assertType[T any](tb testing.TB, got any) T {
 
 	return v
 }
+
+func TestToSnakeCase(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"simple camelCase", "skipOwnershipChallenge", "skip_ownership_challenge"},
+		{"with uppercase acronym", "HTTPCode", "http_code"},
+		{"mixed case acronym", "XMLHttpRequest", "xml_http_request"},
+		{"already snake_case", "already_snake", "already_snake"},
+		{"single word lowercase", "token", "token"},
+		{"single word uppercase", "TOKEN", "token"},
+		{"starts with uppercase", "ApiKey", "api_key"},
+		{"multiple acronyms", "HTTPSConnectionURL", "https_connection_url"},
+		{"acronym at end", "connectHTTPS", "connect_https"},
+		{"numbers", "base64Encoded", "base64_encoded"},
+		{"consecutive capitals", "IOError", "io_error"},
+		{"camelCase with TLS", "calyptiaTLS", "calyptia_tls"},
+		{"camelCase host", "calyptiaHost", "calyptia_host"},
+		{"max buffered messages", "maxBufferedMessages", "max_buffered_messages"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := toSnakeCase(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

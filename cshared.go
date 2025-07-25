@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -505,15 +506,15 @@ func decodeMsg(dec *msgpack.Decoder, tag string) (Message, error) {
 	if err := msgpack.Unmarshal(entry[0], &eventTime); err != nil {
 		var eventWithMetadata []msgpack.RawMessage // for Fluent Bit V2 metadata type of format
 		if err = msgpack.Unmarshal(entry[0], &eventWithMetadata); err != nil {
-			return out, fmt.Errorf("msgpack unmarshal event with metadata: %w", errmsgpack)
+			return out, fmt.Errorf("msgpack unmarshal event with metadata: %w", err)
 		}
 
 		if len(eventWithMetadata) < 1 {
 			return out, fmt.Errorf("msgpack unmarshal event time with metadata: expected 1 element, got %d", len(eventWithMetadata))
 		}
 
-		if errunpack := msgpack.Unmarshal(eventWithMetadata[0], &eventTime); errunpack != nil {
-			return out, fmt.Errorf("msgpack unmarshal event time with metadata: %w", errunpack)
+		if err = msgpack.Unmarshal(eventWithMetadata[0], &eventTime); err != nil {
+			return out, fmt.Errorf("msgpack unmarshal event time with metadata: %w", err)
 		}
 
 		return out, fmt.Errorf("msgpack unmarshal event time: %w", err)
@@ -542,8 +543,12 @@ type flbInputConfigLoader struct {
 	ptr unsafe.Pointer
 }
 
+// String retrieves a configuration value by key.
+// All configuration keys in Fluent Bit are in snake_case format.
+// This method automatically converts camelCase keys to snake_case,
+// so both "apiKey" and "api_key" will retrieve the same value.
 func (f *flbInputConfigLoader) String(key string) string {
-	return unquote(input.FLBPluginConfigKey(f.ptr, key))
+	return unquote(input.FLBPluginConfigKey(f.ptr, toSnakeCase(key)))
 }
 
 func unquote(s string) string {
@@ -565,16 +570,24 @@ type flbOutputConfigLoader struct {
 	ptr unsafe.Pointer
 }
 
+// String retrieves a configuration value by key.
+// All configuration keys in Fluent Bit are in snake_case format.
+// This method automatically converts camelCase keys to snake_case,
+// so both "apiKey" and "api_key" will retrieve the same value.
 func (f *flbOutputConfigLoader) String(key string) string {
-	return unquote(output.FLBPluginConfigKey(f.ptr, key))
+	return unquote(output.FLBPluginConfigKey(f.ptr, toSnakeCase(key)))
 }
 
 type flbCustomConfigLoader struct {
 	ptr unsafe.Pointer
 }
 
+// String retrieves a configuration value by key.
+// All configuration keys in Fluent Bit are in snake_case format.
+// This method automatically converts camelCase keys to snake_case,
+// so both "apiKey" and "api_key" will retrieve the same value.
 func (f *flbCustomConfigLoader) String(key string) string {
-	return unquote(custom.FLBPluginConfigKey(f.ptr, key))
+	return unquote(custom.FLBPluginConfigKey(f.ptr, toSnakeCase(key)))
 }
 
 type flbInputLogger struct {
@@ -658,4 +671,17 @@ func makeMetrics(cmp *cmetrics.Context) Metrics {
 			fmt.Fprintf(os.Stderr, "metrics: %s\n", err)
 		},
 	}
+}
+
+var (
+	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
+)
+
+// toSnakeCase converts a camelCase string to snake_case.
+// Taken from https://stackoverflow.com/questions/56616196/how-to-convert-camel-case-string-to-snake-case.
+func toSnakeCase(str string) string {
+	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
+	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
+	return strings.ToLower(snake)
 }
