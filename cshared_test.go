@@ -693,35 +693,32 @@ func TestNumberTypePreservation(t *testing.T) {
 	if decodedMsg.Record == nil {
 		t.Fatal("Record should not be nil")
 	}
+
 	record, ok := decodedMsg.Record.(map[string]any)
-	assert.True(t, ok, "Record should be a map[string]any")
+	if !ok {
+		t.Fatal("Record should be a map[string]any")
+	}
 
-	// Test integer preservation
-	assert.Equal(t, int64(42), assertType[int64](t, record["integer_positive"]))
-	assert.Equal(t, int64(-123), assertType[int64](t, record["integer_negative"]))
-	assert.Equal(t, int64(0), assertType[int64](t, record["integer_zero"]))
-	assert.Equal(t, int64(9223372036854775807), assertType[int64](t, record["integer_large"]))
-
-	// Test float preservation
-	assert.Equal(t, float64(3.14), assertType[float64](t, record["float_simple"]))
-	assert.Equal(t, float64(-2.71), assertType[float64](t, record["float_negative"]))
-	assert.Equal(t, float64(0.0), assertType[float64](t, record["float_zero"]))
-	assert.Equal(t, float64(1.23e-4), assertType[float64](t, record["float_scientific"]))
-
-	// Test other types are preserved
-	assert.Equal(t, "test", assertType[string](t, record["string_value"]))
-	assert.Equal(t, true, assertType[bool](t, record["boolean_value"]))
-
-	// Test array with mixed number types
-	mixedArray := assertType[[]any](t, record["mixed_in_array"])
-	assert.Equal(t, int64(1), assertType[int64](t, mixedArray[0]))
-	assert.Equal(t, float64(2.5), assertType[float64](t, mixedArray[1]))
-	assert.Equal(t, int64(3), assertType[int64](t, mixedArray[2]))
-
-	// Test nested map with number types
-	nestedMap := assertType[map[string]any](t, record["nested_map"])
-	assert.Equal(t, int64(456), assertType[int64](t, nestedMap["nested_int"]))
-	assert.Equal(t, float64(7.89), assertType[float64](t, nestedMap["nested_float"]))
+	// Compare each field from original record with decoded record
+	// assert.Equal checks both value and type, so this ensures type preservation
+	for k, v := range originalRecord {
+		decodedValue := record[k]
+		switch originalValue := v.(type) {
+		case []any:
+			decodedSlice := assertType[[]any](t, decodedValue)
+			assert.Equal(t, len(originalValue), len(decodedSlice), "Array length for field %q", k)
+			for i, originalItem := range originalValue {
+				assert.Equal(t, originalItem, decodedSlice[i], "Field %q[%d]", k, i)
+			}
+		case map[string]any:
+			decodedMap := assertType[map[string]any](t, decodedValue)
+			for nestedKey, nestedOriginal := range originalValue {
+				assert.Equal(t, nestedOriginal, decodedMap[nestedKey], "Field %q.%q", k, nestedKey)
+			}
+		default:
+			assert.Equal(t, v, decodedValue, "Field %q", k)
+		}
+	}
 
 	// Verify that tag is preserved
 	assert.Equal(t, "test-tag", decodedMsg.Tag())
