@@ -114,6 +114,7 @@ func RegisterInput(name, desc string, in InputPlugin) {
 }
 
 // UnregisterInput unregisters the input plugin.
+// This is mostly intended for use within plugin tests.
 func UnregisterInput() {
 	if theInput == nil {
 		return
@@ -134,6 +135,7 @@ func RegisterOutput(name, desc string, out OutputPlugin) {
 }
 
 // UnregisterOutput unregisters the output plugin.
+// This is mostly intended for use within plugin tests.
 func UnregisterOutput() {
 	if theOutput == nil {
 		return
@@ -154,6 +156,7 @@ func RegisterCustom(name, desc string, custom CustomPlugin) {
 }
 
 // UnregisterCustom unregisters the custom plugin.
+// This is mostly intended for use within plugin tests.
 func UnregisterCustom() {
 	if theCustom == nil {
 		return
