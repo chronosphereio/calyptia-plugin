@@ -520,8 +520,14 @@ func decodeMsg(dec *msgpack.Decoder, tag string) (Message, error) {
 		return out, fmt.Errorf("msgpack unmarshal event time: %w", err)
 	}
 
+	// Create a decoder that preserves number types (int64 vs float64)
+	// instead of converting all numbers to float64 like the default msgpack.Unmarshal
+	recordDecoder := msgpack.NewDecoder(bytes.NewReader(entry[1]))
+	// Configure decoder to preserve exact number types instead of converting to float64
+	recordDecoder.UseLooseInterfaceDecoding(false)
+
 	var record map[string]any
-	if err := msgpack.Unmarshal(entry[1], &record); err != nil {
+	if err := recordDecoder.Decode(&record); err != nil {
 		return out, fmt.Errorf("msgpack unmarshal event record: %w", err)
 	}
 

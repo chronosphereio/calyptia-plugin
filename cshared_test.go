@@ -647,3 +647,79 @@ func TestToSnakeCase(t *testing.T) {
 		})
 	}
 }
+
+// TestNumberTypePreservation tests that the decodeMsg function preserves
+// number types (int64 vs float64) instead of converting all numbers to float64.
+func TestNumberTypePreservation(t *testing.T) {
+	now := time.Now()
+
+	// Create a message with various number types that should be preserved
+	originalRecord := map[string]any{
+		"integer_positive": int64(42),
+		"integer_negative": int64(-123),
+		"integer_zero":     int64(0),
+		"integer_large":    int64(9223372036854775807), // max int64
+		"float_simple":     float64(3.14),
+		"float_negative":   float64(-2.71),
+		"float_zero":       float64(0.0),
+		"float_scientific": float64(1.23e-4),
+		"string_value":     "test",
+		"boolean_value":    true,
+		"mixed_in_array":   []any{int64(1), float64(2.5), int64(3)},
+		"nested_map": map[string]any{
+			"nested_int":   int64(456),
+			"nested_float": float64(7.89),
+		},
+	}
+
+	msg := Message{
+		Time:   now,
+		Record: originalRecord,
+	}
+
+	// Marshal the message as it would be done by the input plugin
+	marshaledData, err := msgpack.Marshal([]any{
+		&EventTime{msg.Time},
+		msg.Record,
+	})
+	assert.NoError(t, err)
+
+	// Create a decoder and decode the message using our fixed decodeMsg function
+	decoder := msgpack.NewDecoder(bytes.NewReader(marshaledData))
+	decodedMsg, err := decodeMsg(decoder, "test-tag")
+	assert.NoError(t, err)
+
+	// Verify the decoded message structure
+	if decodedMsg.Record == nil {
+		t.Fatal("Record should not be nil")
+	}
+
+	record, ok := decodedMsg.Record.(map[string]any)
+	if !ok {
+		t.Fatal("Record should be a map[string]any")
+	}
+
+	// Compare each field from original record with decoded record
+	// assert.Equal checks both value and type, so this ensures type preservation
+	for k, v := range originalRecord {
+		decodedValue := record[k]
+		switch originalValue := v.(type) {
+		case []any:
+			decodedSlice := assertType[[]any](t, decodedValue)
+			assert.Equal(t, len(originalValue), len(decodedSlice), "Array length for field %q", k)
+			for i, originalItem := range originalValue {
+				assert.Equal(t, originalItem, decodedSlice[i], "Field %q[%d]", k, i)
+			}
+		case map[string]any:
+			decodedMap := assertType[map[string]any](t, decodedValue)
+			for nestedKey, nestedOriginal := range originalValue {
+				assert.Equal(t, nestedOriginal, decodedMap[nestedKey], "Field %q.%q", k, nestedKey)
+			}
+		default:
+			assert.Equal(t, v, decodedValue, "Field %q", k)
+		}
+	}
+
+	// Verify that tag is preserved
+	assert.Equal(t, "test-tag", decodedMsg.Tag())
+}
