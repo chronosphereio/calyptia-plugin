@@ -113,6 +113,17 @@ func RegisterInput(name, desc string, in InputPlugin) {
 	theInput = in
 }
 
+// UnregisterInput unregisters the input plugin.
+func UnregisterInput() {
+	if theInput == nil {
+		return
+	}
+	atomic.StoreUint32(&atomicUint32, 0)
+	theName = ""
+	theDesc = ""
+	theInput = nil
+}
+
 // RegisterOutput plugin.
 // This function must be called only once per file.
 func RegisterOutput(name, desc string, out OutputPlugin) {
@@ -122,6 +133,17 @@ func RegisterOutput(name, desc string, out OutputPlugin) {
 	theOutput = out
 }
 
+// UnregisterOutput unregisters the output plugin.
+func UnregisterOutput() {
+	if theOutput == nil {
+		return
+	}
+	atomic.StoreUint32(&atomicUint32, 0)
+	theName = ""
+	theDesc = ""
+	theOutput = nil
+}
+
 // RegisterCustom plugin.
 // This function must be called only once per file.
 func RegisterCustom(name, desc string, custom CustomPlugin) {
@@ -129,4 +151,15 @@ func RegisterCustom(name, desc string, custom CustomPlugin) {
 	theName = name
 	theDesc = desc
 	theCustom = custom
+}
+
+// UnregisterCustom unregisters the custom plugin.
+func UnregisterCustom() {
+	if theCustom == nil {
+		return
+	}
+	atomic.StoreUint32(&atomicUint32, 0)
+	theName = ""
+	theDesc = ""
+	theCustom = nil
 }
