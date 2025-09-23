@@ -47,7 +47,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ secrets.CI_USERNAME }}
-          password: ${{ secrets.CI_PAT }}
+          password: ${{ secrets.CALYPTIA_CI_PAT }}
 
       - name: Cache Golang Docker Image
         run: docker pull golang:latest
@@ -107,5 +107,5 @@ jobs:
           version: latest
           args: release --clean
         env:
-          GITHUB_TOKEN: ${{ secrets.CI_PAT }}
+          GITHUB_TOKEN: ${{ secrets.CALYPTIA_CI_PAT }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
