@@ -23,16 +23,30 @@ var (
 )
 
 var (
-	registerWG sync.WaitGroup
-	initWG     sync.WaitGroup
-	runCtx     context.Context
-	runCancel  context.CancelFunc
-	theChannel chan Message
+	registerWG        sync.WaitGroup
+	registerWGCounter int32 // tracks Add/Done balance to prevent negative WaitGroup panic
+	initWG            sync.WaitGroup
+	runCtx            context.Context
+	runCancel         context.CancelFunc
+	theChannel        chan Message
 )
 
 func init() {
 	registerWG.Add(1)
+	atomic.AddInt32(&registerWGCounter, 1)
 	theChannel = nil
+}
+
+// registerWGDone safely calls registerWG.Done() only if the WaitGroup counter
+// is positive. This prevents a panic when FLBPluginRegister is called without
+// a prior FLBPluginPreRegister (which only happens during hot-reload).
+func registerWGDone() {
+	if atomic.AddInt32(&registerWGCounter, -1) >= 0 {
+		registerWG.Done()
+	} else {
+		// Counter went negative — restore it and skip Done().
+		atomic.AddInt32(&registerWGCounter, 1)
+	}
 }
 
 type Fluentbit struct {
