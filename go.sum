@@ -14,8 +14,8 @@ github.com/alecthomas/repr v0.4.0 h1:GhI2A8MACjfegCPVq9f1FLvIBS+DrQ2KQBFZP1iFzXc
 github.com/alecthomas/repr v0.4.0/go.mod h1:Fr0507jx4eOXV7AlPV6AVZLYrLIuIeSOWtW57eE/O/4=
 github.com/calyptia/cmetrics-go v0.1.9 h1:9khwsgJcKFIQZjDE62dVVySKy8iUtvDX1NB4LbzcU2k=
 github.com/calyptia/cmetrics-go v0.1.9/go.mod h1:7fdUYjIRa/8Pe0soqoJnMmonGmbn+ev0ml88oPR9liE=
-github.com/calyptia/go-fluentbit-config/v2 v2.11.0 h1:W/vr3tKwFYOF7jbHNPyzzRp/t2N7mAQ8MMs4LXRbxPc=
-github.com/calyptia/go-fluentbit-config/v2 v2.11.0/go.mod h1:RHfAJMXOPCylaa30ap0ITBOGJxN+pfetQ+FKUpg0VqI=
+github.com/calyptia/go-fluentbit-config/v2 v2.14.0 h1:U9AZwxuZm0qlFJ2GRgd7rXLweCcWd+PY2BlJ/tAQtXE=
+github.com/calyptia/go-fluentbit-config/v2 v2.14.0/go.mod h1:RHfAJMXOPCylaa30ap0ITBOGJxN+pfetQ+FKUpg0VqI=
 github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
 github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/containerd/continuity v0.4.3 h1:6HVkalIp+2u1ZLH1J/pYX2oBVXlJZvh1X1A7bEZ9Su8=
