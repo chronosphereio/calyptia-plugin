@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -51,6 +52,7 @@ var (
 func FLBPluginPreRegister(hotReloading C.int) int {
 	if hotReloading == C.int(1) {
 		registerWG.Add(1)
+		atomic.AddInt32(&registerWGCounter, 1)
 	}
 
 	return input.FLB_OK
@@ -61,7 +63,7 @@ func FLBPluginPreRegister(hotReloading C.int) int {
 //
 //export FLBPluginRegister
 func FLBPluginRegister(def unsafe.Pointer) int {
-	defer registerWG.Done()
+	defer registerWGDone()
 
 	if theInput == nil && theOutput == nil && theCustom == nil {
 		fmt.Fprintf(os.Stderr, "no input or output or custom registered\n")
@@ -516,8 +518,6 @@ func decodeMsg(dec *msgpack.Decoder, tag string) (Message, error) {
 		if err = msgpack.Unmarshal(eventWithMetadata[0], &eventTime); err != nil {
 			return out, fmt.Errorf("msgpack unmarshal event time with metadata: %w", err)
 		}
-
-		return out, fmt.Errorf("msgpack unmarshal event time: %w", err)
 	}
 
 	var record map[string]any
